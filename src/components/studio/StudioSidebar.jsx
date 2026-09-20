@@ -9,20 +9,16 @@ import {
   Disc, 
   Layers, 
   Sparkles, 
-  Crown, 
-  History, 
-  Heart, 
+  Zap, 
   HelpCircle, 
   Tag, 
-  Zap 
+  CheckCircle2
 } from 'lucide-react';
 import { useVip } from '@/context/VipContext';
-import { useAuth } from '@/context/AuthContext';
 
 export default function StudioSidebar({ className = '' }) {
   const pathname = usePathname();
-  const { isVip, openVipModal } = useVip();
-  const { user, isAuthenticated, openAuthModal } = useAuth();
+  const { isVip, vipKey, openVipModal } = useVip();
 
   const libraryNav = [
     { name: 'Browse Studio', icon: Compass, href: '/', active: pathname === '/' },
@@ -33,7 +29,7 @@ export default function StudioSidebar({ className = '' }) {
   ];
 
   const toolsNav = [
-    { name: 'VIP Pricing', icon: Tag, href: '/pricing', active: pathname === '/pricing' },
+    { name: 'Premium Plans', icon: Tag, href: '/pricing', active: pathname === '/pricing' },
     { name: 'FAQ & Help', icon: HelpCircle, href: '/faq', active: pathname === '/faq' },
   ];
 
@@ -57,14 +53,14 @@ export default function StudioSidebar({ className = '' }) {
             <h1 className="font-extrabold text-lg text-white tracking-tight leading-none">
               <span className="text-[#f0fc54]">Tune</span>Grab
             </h1>
-            <span className="text-[10px] text-zinc-400 font-medium">5-in-1 Music Hub</span>
+            <span className="text-[10px] text-zinc-400 font-medium">Universal Music Studio</span>
           </div>
         </Link>
 
-        {/* Section 1: Library */}
+        {/* Section 1: Downloader Engines */}
         <div className="space-y-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 px-3">
-            Downloader Engines
+            Download Engines
           </h3>
           <nav className="space-y-1">
             {libraryNav.map((item) => {
@@ -90,10 +86,10 @@ export default function StudioSidebar({ className = '' }) {
           </nav>
         </div>
 
-        {/* Section 2: Services & Pricing */}
+        {/* Section 2: Tools & Pricing */}
         <div className="space-y-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 px-3">
-            Tools & Support
+            Support & Tools
           </h3>
           <nav className="space-y-1">
             {toolsNav.map((item) => {
@@ -117,53 +113,51 @@ export default function StudioSidebar({ className = '' }) {
         </div>
       </div>
 
-      {/* User Account / VIP Card */}
+      {/* SpotSaver Style Premium / Ad-Free Card */}
       <div className="pt-4">
-        {isAuthenticated ? (
-          <div className="p-4 rounded-3xl bg-gradient-to-br from-[#292a34] to-[#1e1f26] border border-white/10 shadow-xl space-y-2.5">
+        {isVip ? (
+          <div className="p-4 rounded-3xl bg-gradient-to-br from-emerald-950/40 to-[#1e1f26] border border-emerald-500/30 shadow-xl space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono bg-black/40 text-[#f0fc54] px-2 py-0.5 rounded-md font-bold">
-                {user.userId}
-              </span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                isVip ? 'bg-amber-400 text-black' : 'bg-zinc-800 text-zinc-300'
-              }`}>
-                {isVip ? 'VIP TURBO' : 'FREE TIER'}
+              <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Ad-Free Active</span>
+              </div>
+              <span className="text-[10px] font-mono bg-black/40 text-emerald-300 px-2 py-0.5 rounded-md font-bold">
+                {vipKey ? vipKey.slice(0, 10) + '...' : 'ACTIVE'}
               </span>
             </div>
-            <div>
-              <p className="text-xs font-bold text-white truncate">{user.name}</p>
-              <p className="text-[10px] text-zinc-400 truncate">{user.email}</p>
-            </div>
+            <p className="text-[11px] text-zinc-400 leading-tight">
+              Enjoy 100% Ad-Free UI and fast 320kbps batch ZIP downloads.
+            </p>
             <button
               onClick={openVipModal}
-              className="w-full py-2 rounded-xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-[11px] shadow transition active:scale-95 flex items-center justify-center gap-1.5"
+              className="w-full py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-[11px] border border-emerald-500/30 transition active:scale-95 cursor-pointer"
             >
-              <Crown className="w-3.5 h-3.5 fill-black" />
-              {isVip ? 'Manage VIP License' : 'Upgrade VIP (₹99)'}
+              Manage License Key
             </button>
           </div>
         ) : (
-          <div className="p-4 rounded-3xl bg-gradient-to-br from-[#292a34] to-[#1e1f26] border border-amber-500/20 shadow-xl space-y-2.5">
+          <div className="p-4 rounded-3xl bg-gradient-to-br from-[#22242d] to-[#181920] border border-emerald-500/20 shadow-xl space-y-2.5">
             <div className="flex items-center justify-between">
-              <div className="w-7 h-7 rounded-xl bg-amber-400 text-black flex items-center justify-center font-bold">
-                <Crown className="w-3.5 h-3.5" />
+              <div className="w-7 h-7 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-bold">
+                <Zap className="w-4 h-4 fill-black" />
               </div>
-              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                PRO ACCESS
+              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                100% AD-FREE
               </span>
             </div>
             <div>
-              <h4 className="text-xs font-bold text-white">Save & Sync Library</h4>
+              <h4 className="text-xs font-bold text-white">Get TuneGrab Premium</h4>
               <p className="text-[10px] text-zinc-400 leading-tight mt-0.5">
-                Sign in to sync your download history across all computers.
+                Download unlimited tracks & playlists with 0 ads and instant batch ZIP.
               </p>
             </div>
             <button
-              onClick={() => openAuthModal('login')}
-              className="w-full py-2 rounded-xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-[11px] shadow transition active:scale-95 flex items-center justify-center gap-1"
+              onClick={openVipModal}
+              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] shadow-lg shadow-emerald-600/20 transition active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              Free Sign In / Sign Up
+              <Zap className="w-3.5 h-3.5 fill-white" />
+              <span>Get Premium (₹199)</span>
             </button>
           </div>
         )}

@@ -137,7 +137,6 @@ export default function RootLayout({ children }) {
               <PlayerProvider>
                 {children}
                 <VipModal />
-                <AuthModal />
               </PlayerProvider>
             </AuthProvider>
           </VipProvider>

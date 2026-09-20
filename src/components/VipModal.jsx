@@ -2,14 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useVip } from '@/context/VipContext';
-import { useAuth } from '@/context/AuthContext';
 import { 
   X, 
-  Crown, 
-  Check, 
-  Sparkles, 
-  ShieldCheck, 
   Zap, 
+  Check, 
+  ShieldCheck, 
   QrCode, 
   CreditCard, 
   Key, 
@@ -18,72 +15,80 @@ import {
   Lock,
   ArrowRight,
   Copy,
-  ExternalLink,
-  Smartphone,
-  Download,
-  Receipt
+  Mail,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 
 export default function VipModal() {
   const { isVip, vipKey, vipExpiry, isModalOpen, closeVipModal, activateVip, deactivateVip } = useVip();
-  const { user, syncUserWithVip } = useAuth();
   
-  const [activeTab, setActiveTab] = useState('plans'); // 'plans' | 'checkout' | 'redeem' | 'receipt'
-  const [selectedPlan, setSelectedPlan] = useState({ id: 'monthly', name: 'Monthly Pro', price: 199, priceStr: '₹199', period: '30 Days', days: 30 });
-  const [redeemKey, setRedeemKey] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
-  const [paymentMethod, setPaymentMethod] = useState('upi'); // 'upi' | 'card'
-
-  // UPI payment state
-  const [upiUtr, setUpiUtr] = useState('');
-  const [payerUpiId, setPayerUpiId] = useState('');
-  const [copiedUpi, setCopiedUpi] = useState(false);
-  const [activeReceipt, setActiveReceipt] = useState(null);
-
-  // Card form state
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-
-  // Merchant details
-  const merchantUpi = process.env.NEXT_PUBLIC_UPI_ID || 'amarmax.me@okhdfcbank';
-  const merchantName = 'Amar Max';
-
-  if (!isModalOpen) return null;
-
+  // Tabs: 'buy' | 'restore'
+  const [activeTab, setActiveTab] = useState('buy');
+  
+  // Plans
   const plans = [
     {
-      id: 'weekly',
-      name: 'Weekly Pass',
-      price: 99,
-      priceStr: '₹99',
-      period: '7 Days',
-      days: 7,
-      badge: 'Starter',
-      popular: false,
-    },
-    {
       id: 'monthly',
-      name: 'Monthly Pro',
+      name: '30-Day Pass',
       price: 199,
       priceStr: '₹199',
-      period: '30 Days',
+      usdPrice: '$2.50',
+      description: 'Ad-Free • ZIP Download • Fast Downloads',
       days: 30,
-      badge: 'Popular',
       popular: true,
     },
     {
       id: 'lifetime',
-      name: 'Lifetime VIP',
+      name: 'Lifetime Pass',
       price: 499,
       priceStr: '₹499',
-      period: 'Permanent Access',
+      usdPrice: '$6.00',
+      description: 'Permanent Ad-Free • Unlimited Batch ZIP',
       days: 3650,
-      badge: 'Best Value',
+      popular: false,
+    },
+    {
+      id: 'weekly',
+      name: '7-Day Pass',
+      price: 99,
+      priceStr: '₹99',
+      usdPrice: '$1.20',
+      description: 'Ad-Free Access for 1 Week',
+      days: 7,
       popular: false,
     },
   ];
+
+  const [selectedPlan, setSelectedPlan] = useState(plans[0]);
+  const [buyerEmail, setBuyerEmail] = useState('');
+  const [showPaymentStep, setShowPaymentStep] = useState(false);
+  
+  // Payment step state
+  const [upiUtr, setUpiUtr] = useState('');
+  const [copiedUpi, setCopiedUpi] = useState(false);
+
+  // Restore tab state
+  const [restoreKey, setRestoreKey] = useState('');
+
+  const [loading, setLoading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
+  const [issuedVoucher, setIssuedVoucher] = useState(null);
+
+  const merchantUpi = process.env.NEXT_PUBLIC_UPI_ID || 'amarmax.me@okhdfcbank';
+  const merchantName = 'Amar Max';
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (isModalOpen) {
+      setStatusMsg({ type: '', text: '' });
+      setShowPaymentStep(false);
+      setUpiUtr('');
+      setIssuedVoucher(null);
+    }
+  }, [isModalOpen]);
+
+  if (!isModalOpen) return null;
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText(merchantUpi);
@@ -91,9 +96,77 @@ export default function VipModal() {
     setTimeout(() => setCopiedUpi(false), 2000);
   };
 
-  const handleRedeem = async (e) => {
+  // Step 1: Proceed to Payment View
+  const handleProceedToPayment = (e) => {
     e.preventDefault();
-    if (!redeemKey.trim()) return;
+    setStatusMsg({ type: '', text: '' });
+
+    const cleanEmail = buyerEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setStatusMsg({ type: 'error', text: 'Please enter a valid email address for license key delivery.' });
+      return;
+    }
+
+    setShowPaymentStep(true);
+  };
+
+  // Step 2: Verify UTR & Issue License Key
+  const handleVerifyPayment = async (e) => {
+    e.preventDefault();
+    setStatusMsg({ type: '', text: '' });
+
+    const cleanUtr = upiUtr.trim().replace(/\s+/g, '');
+    const utrRegex = /^\d{12}$/;
+    if (!utrRegex.test(cleanUtr)) {
+      setStatusMsg({ 
+        type: 'error', 
+        text: 'Invalid UTR. Please enter the genuine 12-digit numeric Reference Number from your Google Pay / PhonePe / Paytm payment.' 
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/payment/upi-submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan: selectedPlan.id,
+          utr: cleanUtr,
+          userEmail: buyerEmail.trim().toLowerCase(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        setStatusMsg({ type: 'error', text: data.error || 'Payment verification failed.' });
+      } else {
+        activateVip(data.key, data.durationDays);
+        setIssuedVoucher({
+          key: data.key,
+          plan: selectedPlan.name,
+          amount: selectedPlan.priceStr,
+          email: buyerEmail.trim().toLowerCase(),
+          utr: cleanUtr,
+        });
+        setStatusMsg({ 
+          type: 'success', 
+          text: `🎉 License Key generated & activated! Key sent to ${buyerEmail}.` 
+        });
+      }
+    } catch (err) {
+      setStatusMsg({ type: 'error', text: 'Verification service temporarily unavailable.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Tab 2: Restore License Key
+  const handleRestoreKey = async (e) => {
+    e.preventDefault();
+    if (!restoreKey.trim()) return;
 
     setLoading(true);
     setStatusMsg({ type: '', text: '' });
@@ -103,135 +176,23 @@ export default function VipModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          key: redeemKey.trim(),
-          userId: user?.userId || null,
+          key: restoreKey.trim(),
         }),
       });
+
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        setStatusMsg({ type: 'error', text: data.error || 'Invalid VIP license key.' });
+        setStatusMsg({ type: 'error', text: data.error || 'Invalid or unverified VIP license key.' });
       } else {
         activateVip(data.key, data.durationDays);
-        if (user) {
-          syncUserWithVip(data.key, Date.now() + (data.durationDays || 30) * 86400000);
-        }
-        setStatusMsg({ type: 'success', text: '🎉 ' + (data.message || 'VIP License Activated Successfully!') });
+        setStatusMsg({ type: 'success', text: '🎉 Ad-Free Restored Successfully!' });
         setTimeout(() => {
           closeVipModal();
-        }, 1800);
+        }, 1600);
       }
     } catch (err) {
-      setStatusMsg({ type: 'error', text: 'Network error verifying key.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyUpiPayment = async (e) => {
-    e.preventDefault();
-    const cleanUtr = upiUtr.trim().replace(/\s+/g, '');
-
-    // Strict 12-digit numeric validation on client side first
-    const utrRegex = /^\d{12}$/;
-    if (!utrRegex.test(cleanUtr)) {
-      setStatusMsg({ 
-        type: 'error', 
-        text: 'Invalid UTR format. A valid UPI Reference Number (UTR) is strictly 12 numeric digits (e.g. 425612345678). Please verify from your GPay / PhonePe / Paytm receipt.' 
-      });
-      return;
-    }
-
-    setLoading(true);
-    setStatusMsg({ type: '', text: '' });
-
-    try {
-      const res = await fetch('/api/payment/upi-submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plan: selectedPlan.id,
-          utr: cleanUtr,
-          payerUpi: payerUpiId.trim() || 'UPI App',
-          userId: user?.userId || null,
-          userEmail: user?.email || null,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        setStatusMsg({ type: 'error', text: data.error || 'Verification failed. Please verify your UTR.' });
-      } else {
-        activateVip(data.key, data.durationDays);
-        if (user) {
-          syncUserWithVip(data.key, Date.now() + (data.durationDays || 30) * 86400000);
-        }
-        setActiveReceipt({
-          key: data.key,
-          plan: selectedPlan.name,
-          amount: selectedPlan.priceStr,
-          utr: cleanUtr,
-          date: new Date().toLocaleString(),
-        });
-        setActiveTab('receipt');
-      }
-    } catch (err) {
-      setStatusMsg({ type: 'error', text: 'UPI verification service unavailable.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGatewayPayment = async (e) => {
-    e.preventDefault();
-    if (!cardNumber || cardNumber.replace(/\s/g, '').length < 16) {
-      setStatusMsg({ type: 'error', text: 'Please enter a valid 16-digit card number.' });
-      return;
-    }
-    if (!cardExpiry || !cardExpiry.includes('/')) {
-      setStatusMsg({ type: 'error', text: 'Please enter a valid card expiry (MM/YY).' });
-      return;
-    }
-    if (!cardCvv || cardCvv.length < 3) {
-      setStatusMsg({ type: 'error', text: 'Please enter a valid 3-digit CVV.' });
-      return;
-    }
-
-    setLoading(true);
-    setStatusMsg({ type: '', text: '' });
-
-    try {
-      const res = await fetch('/api/payment/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          plan: selectedPlan.id,
-          amount: selectedPlan.price,
-          method: 'CARD / ONLINE GATEWAY',
-          userId: user?.userId || null,
-          userEmail: user?.email || null,
-        }),
-      });
-      const data = await res.json();
-
-      if (data.success && data.key) {
-        activateVip(data.key, data.durationDays);
-        if (user) {
-          syncUserWithVip(data.key, Date.now() + (data.durationDays || 30) * 86400000);
-        }
-        setActiveReceipt({
-          key: data.key,
-          plan: selectedPlan.name,
-          amount: selectedPlan.priceStr,
-          utr: `GATEWAY-${Date.now().toString(36).toUpperCase()}`,
-          date: new Date().toLocaleString(),
-        });
-        setActiveTab('receipt');
-      } else {
-        setStatusMsg({ type: 'error', text: data.error || 'Payment gateway failed.' });
-      }
-    } catch (err) {
-      setStatusMsg({ type: 'error', text: 'Payment gateway error.' });
+      setStatusMsg({ type: 'error', text: 'Network error restoring license key.' });
     } finally {
       setLoading(false);
     }
@@ -239,361 +200,267 @@ export default function VipModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-2xl bg-[#1a1b22] border border-amber-500/30 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        
-        {/* Top Glowing Header */}
-        <div className="relative px-6 py-5 bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-[#1a1b22] border-b border-white/5 flex items-center justify-between">
+      <div 
+        className="relative w-full max-w-md bg-[#121316] border border-white/10 rounded-3xl shadow-2xl overflow-hidden animate-scaleUp text-zinc-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Top Header (SpotSaver Style) */}
+        <div className="p-6 pb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-600 text-black shadow-lg shadow-amber-500/20">
-              <Crown className="w-6 h-6" />
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shadow-inner">
+              <Zap className="w-5 h-5 fill-emerald-400" />
             </div>
             <div>
-              <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
-                VIP Premium Member
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                  TURBO PRO
-                </span>
-              </h3>
-              <p className="text-xs text-zinc-400">Unlock 100% Ad-Free, FLAC Lossless & Unlimited 3x Batch ZIP</p>
+              <h3 className="text-lg font-black text-white leading-tight">Get Premium</h3>
+              <p className="text-xs text-zinc-400">Pay using UPI, QR, GPay & Cards</p>
             </div>
           </div>
+
           <button
             onClick={closeVipModal}
-            className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-white/5 transition cursor-pointer"
+            className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex border-b border-white/5 bg-[#16171d] p-1.5 gap-1">
-          <button
-            onClick={() => setActiveTab('plans')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              activeTab === 'plans'
-                ? 'bg-amber-400 text-black shadow'
-                : 'text-zinc-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>VIP Plans</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('checkout')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              activeTab === 'checkout'
-                ? 'bg-amber-400 text-black shadow'
-                : 'text-zinc-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <CreditCard className="w-3.5 h-3.5" />
-            <span>Instant Checkout</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('redeem')}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              activeTab === 'redeem'
-                ? 'bg-amber-400 text-black shadow'
-                : 'text-zinc-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Key className="w-3.5 h-3.5" />
-            <span>Redeem Key</span>
-          </button>
+        {/* SpotSaver 2-Tab Navigation */}
+        <div className="px-6">
+          <div className="grid grid-cols-2 gap-1 p-1 bg-[#1a1b20] rounded-2xl border border-white/5">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('buy');
+                setShowPaymentStep(false);
+                setStatusMsg({ type: '', text: '' });
+              }}
+              className={`py-2.5 text-xs font-bold rounded-xl transition cursor-pointer ${
+                activeTab === 'buy'
+                  ? 'bg-[#262830] text-white shadow'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Buy Ad-Free
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('restore');
+                setStatusMsg({ type: '', text: '' });
+              }}
+              className={`py-2.5 text-xs font-bold rounded-xl transition cursor-pointer ${
+                activeTab === 'restore'
+                  ? 'bg-[#262830] text-white shadow border border-blue-500/40'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              I already paid
+            </button>
+          </div>
         </div>
 
-        {/* Content Body */}
-        <div className="p-6 overflow-y-auto space-y-6">
-          {/* Active VIP Banner */}
+        <div className="p-6 pt-4 space-y-4">
+          {/* Active Premium Status Badge */}
           {isVip && (
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-amber-400 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-white">Your VIP Membership is Active!</p>
-                  <p className="text-xs text-zinc-400">
-                    Key: <span className="font-mono text-amber-300 font-bold">{vipKey || 'Active'}</span>
-                    {vipExpiry && ` (Valid until: ${new Date(vipExpiry).toLocaleDateString()})`}
-                  </p>
-                </div>
+            <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>Premium is Active (<strong>{vipKey || 'Active'}</strong>)</span>
               </div>
               <button
                 onClick={deactivateVip}
-                className="text-xs text-red-400 hover:text-red-300 underline cursor-pointer"
+                className="text-zinc-400 hover:text-red-400 underline cursor-pointer text-[11px]"
               >
-                Log Out VIP
+                Log Out
               </button>
             </div>
           )}
 
-          {/* Status Message */}
+          {/* Status Alerts */}
           {statusMsg.text && (
             <div
-              className={`p-3.5 rounded-2xl text-xs flex items-center gap-2 font-medium ${
+              className={`p-3 rounded-2xl text-xs flex items-center gap-2 ${
                 statusMsg.type === 'success'
-                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
-                  : 'bg-red-500/10 text-red-300 border border-red-500/30'
+                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
               }`}
             >
               {statusMsg.type === 'success' ? (
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
               ) : (
-                <X className="w-4 h-4 shrink-0" />
+                <AlertCircle className="w-4 h-4 shrink-0" />
               )}
-              {statusMsg.text}
+              <span>{statusMsg.text}</span>
             </div>
           )}
 
-          {/* TAB 1: PLANS */}
-          {activeTab === 'plans' && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                {plans.map((plan) => (
-                  <div
-                    key={plan.id}
-                    onClick={() => setSelectedPlan(plan)}
-                    className={`relative p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
-                      selectedPlan.id === plan.id
-                        ? 'border-amber-400 bg-amber-500/10 ring-2 ring-amber-500/20'
-                        : 'border-white/5 bg-[#24252f]/40 hover:border-white/10'
-                    }`}
-                  >
-                    {plan.badge && (
-                      <span
-                        className={`absolute -top-2.5 right-3 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${
-                          plan.popular
-                            ? 'bg-amber-400 text-black shadow'
-                            : 'bg-[#1a1b22] text-zinc-300 border border-white/10'
-                        }`}
-                      >
-                        {plan.badge}
-                      </span>
-                    )}
-                    <div>
-                      <h4 className="text-sm font-bold text-white mb-1">{plan.name}</h4>
-                      <p className="text-2xl font-black text-amber-400">{plan.priceStr}</p>
-                      <p className="text-[11px] text-zinc-400 mb-3">{plan.period}</p>
-                    </div>
-                    <div className="pt-2 border-t border-white/5 text-[11px] text-zinc-400 flex items-center gap-1.5">
-                      <Check className="w-3.5 h-3.5 text-amber-400" />
-                      All VIP Turbo Features
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* VIP Benefits */}
-              <div className="p-4 rounded-2xl bg-[#24252f]/60 border border-white/5 space-y-2.5">
-                <h5 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Included VIP Turbo Privileges:</h5>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-zinc-300">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span><strong>100% Ad-Free UI</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span><strong>3x Turbo Batch ZIP Downloads</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span><strong>True 320kbps & FLAC Lossless</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span><strong>0s Instant Download Countdown</strong></span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setActiveTab('checkout')}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-extrabold text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-              >
-                <span>Proceed to Checkout ({selectedPlan.priceStr} - {selectedPlan.name})</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* TAB 2: INSTANT CHECKOUT */}
-          {activeTab === 'checkout' && (
-            <div className="space-y-4">
-              <div className="p-3.5 rounded-2xl bg-[#24252f] border border-white/5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-zinc-400">Selected VIP Plan:</p>
-                  <p className="text-sm font-bold text-white">{selectedPlan.name} ({selectedPlan.priceStr})</p>
-                </div>
-                <button
-                  onClick={() => setActiveTab('plans')}
-                  className="text-xs text-amber-400 hover:underline cursor-pointer"
-                >
-                  Change Plan
-                </button>
-              </div>
-
-              {/* Payment Method Switch */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setPaymentMethod('upi')}
-                  className={`py-2.5 px-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-                    paymentMethod === 'upi'
-                      ? 'border-amber-400 bg-amber-500/15 text-amber-300'
-                      : 'border-white/5 bg-[#24252f] text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <QrCode className="w-4 h-4" />
-                  <span>UPI / QR / GPay / Paytm</span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod('card')}
-                  className={`py-2.5 px-3 rounded-2xl border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-                    paymentMethod === 'card'
-                      ? 'border-amber-400 bg-amber-500/15 text-amber-300'
-                      : 'border-white/5 bg-[#24252f] text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Card / NetBanking</span>
-                </button>
-              </div>
-
-              {/* UPI QR & UTR FORM */}
-              {paymentMethod === 'upi' ? (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-3xl bg-[#24252f] border border-white/5 text-center space-y-3">
-                    <div className="flex items-center justify-between text-xs text-zinc-400">
-                      <span>Amount Payable: <strong className="text-white font-mono text-sm">{selectedPlan.priceStr}</strong></span>
-                      <span className="text-[10px] text-emerald-400 font-bold">● Live Instant UPI Gateway</span>
-                    </div>
-
-                    {/* Official Google Pay UPI QR Code */}
-                    <div className="inline-block p-2.5 bg-white rounded-3xl shadow-2xl border-2 border-amber-400/40">
-                      <div className="w-48 sm:w-56 overflow-hidden rounded-2xl bg-white flex flex-col items-center">
-                        <img 
-                          src="/upi_qr.jpg" 
-                          alt="Amar Max Google Pay UPI QR Code" 
-                          className="w-full h-auto object-contain rounded-xl"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold">
-                        <span>● Verified Payee: <strong>Amar Max</strong></span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
-                      <span className="text-xs font-mono text-zinc-200 font-bold bg-[#1a1b22] px-3.5 py-2 rounded-xl border border-white/10 select-all">
-                        {merchantUpi}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleCopyUpi}
-                        className="px-3.5 py-2 bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs rounded-xl shadow transition cursor-pointer flex items-center gap-1.5 active:scale-95"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>{copiedUpi ? 'Copied!' : 'Copy UPI ID'}</span>
-                      </button>
-                    </div>
-
-                    <p className="text-[11px] text-zinc-400">
-                      Scan with <strong>Google Pay, PhonePe, Paytm, BHIM, or any Banking App</strong>.
-                    </p>
+          {/* TAB 1: BUY AD-FREE */}
+          {activeTab === 'buy' && (
+            <div>
+              {/* Issued Success Voucher */}
+              {issuedVoucher ? (
+                <div className="p-5 rounded-3xl bg-[#1c1d24] border border-emerald-500/40 text-center space-y-3 animate-fadeIn">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto animate-bounce" />
+                  <div>
+                    <h4 className="text-base font-bold text-white">Payment Verified!</h4>
+                    <p className="text-xs text-zinc-400">Your site is now 100% Ad-Free.</p>
                   </div>
 
-                  {/* Step 2: Enter 12-Digit UTR Number */}
-                  <form onSubmit={handleVerifyUpiPayment} className="space-y-3 p-4 rounded-3xl bg-[#24252f] border border-white/5">
-                    <div className="space-y-1">
-                      <label className="block text-xs font-bold text-white">
-                        Enter 12-Digit UPI UTR / Transaction Reference Number <span className="text-amber-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        maxLength={12}
-                        value={upiUtr}
-                        onChange={(e) => setUpiUtr(e.target.value.replace(/\D/g, ''))}
-                        placeholder="e.g. 423589123456 (12 digits)"
-                        className="w-full bg-[#1a1b22] text-xs sm:text-sm text-white font-mono px-4 py-3 rounded-2xl border border-white/10 focus:border-[#f0fc54] outline-none"
-                      />
+                  <div className="p-3.5 rounded-2xl bg-[#121316] border border-white/5 text-left text-xs font-mono space-y-1.5">
+                    <div className="flex justify-between text-zinc-400">
+                      <span>Plan:</span>
+                      <span className="text-white font-bold">{issuedVoucher.plan} ({issuedVoucher.amount})</span>
                     </div>
-
-                    <button
-                      type="submit"
-                      disabled={loading || upiUtr.length !== 12}
-                      className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs sm:text-sm shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Verifying UPI UTR...</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="w-4 h-4" />
-                          <span>Verify UTR & Activate VIP Turbo</span>
-                        </>
-                      )}
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                /* Card & Online Gateway Checkout */
-                <form onSubmit={handleGatewayPayment} className="p-4 rounded-3xl bg-[#24252f] border border-white/5 space-y-4">
-                  <div className="space-y-1">
-                    <label className="block text-xs text-zinc-400">Card Number (16 Digits)</label>
-                    <input
-                      type="text"
-                      required
-                      maxLength={19}
-                      value={cardNumber}
-                      onChange={(e) => setCardNumber(e.target.value)}
-                      placeholder="4532 •••• •••• 8892"
-                      className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono focus:border-amber-400 outline-none"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="block text-xs text-zinc-400">Expiry (MM/YY)</label>
-                      <input
-                        type="text"
-                        required
-                        maxLength={5}
-                        value={cardExpiry}
-                        onChange={(e) => setCardExpiry(e.target.value)}
-                        placeholder="12/28"
-                        className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono focus:border-amber-400 outline-none"
-                      />
+                    <div className="flex justify-between text-zinc-400">
+                      <span>Sent To:</span>
+                      <span className="text-emerald-400">{issuedVoucher.email}</span>
                     </div>
-                    <div className="space-y-1">
-                      <label className="block text-xs text-zinc-400">CVV (3 Digits)</label>
-                      <input
-                        type="password"
-                        required
-                        maxLength={4}
-                        value={cardCvv}
-                        onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
-                        placeholder="888"
-                        className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono focus:border-amber-400 outline-none"
-                      />
+                    <div className="flex justify-between pt-1 border-t border-white/5">
+                      <span className="text-emerald-400 font-bold">License Key:</span>
+                      <span className="text-white font-black select-all">{issuedVoucher.key}</span>
                     </div>
                   </div>
 
                   <button
+                    onClick={closeVipModal}
+                    className="w-full py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-lg transition cursor-pointer"
+                  >
+                    Done & Continue
+                  </button>
+                </div>
+              ) : !showPaymentStep ? (
+                /* Step 1: Select Plan & Enter Email */
+                <form onSubmit={handleProceedToPayment} className="space-y-4">
+                  {/* Plan Cards */}
+                  <div className="space-y-2">
+                    {plans.map((plan) => (
+                      <div
+                        key={plan.id}
+                        onClick={() => setSelectedPlan(plan)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                          selectedPlan.id === plan.id
+                            ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/30'
+                            : 'border-white/5 bg-[#1a1b20] hover:border-white/10'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white">{plan.name}</h4>
+                            {plan.popular && (
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
+                                Most Popular
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-zinc-400 mt-0.5">{plan.description}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-base font-black text-emerald-400">{plan.priceStr}</p>
+                          <span className="text-[10px] text-zinc-500">{plan.usdPrice}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Email Input */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-zinc-300">
+                      Email address <span className="text-emerald-400">*</span> <span className="text-zinc-500 font-normal">(for license key delivery & recovery)</span>
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={buyerEmail}
+                      onChange={(e) => setBuyerEmail(e.target.value)}
+                      placeholder="your.email@example.com"
+                      className="w-full bg-[#1a1b20] text-xs text-white px-4 py-3 rounded-2xl border border-white/10 focus:border-emerald-500 outline-none transition"
+                    />
+                  </div>
+
+                  <button
                     type="submit"
-                    disabled={loading}
-                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-extrabold text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                    className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-emerald-600/20 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span>Continue to Payment ({selectedPlan.priceStr} Pass)</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </form>
+              ) : (
+                /* Step 2: UPI QR Code & 12-Digit UTR */
+                <form onSubmit={handleVerifyPayment} className="space-y-4 animate-fadeIn">
+                  <div className="p-4 rounded-2xl bg-[#1a1b20] border border-white/5 text-center space-y-2.5">
+                    <div className="flex items-center justify-between text-xs text-zinc-400">
+                      <span>Plan: <strong className="text-white">{selectedPlan.name}</strong></span>
+                      <span className="text-emerald-400 font-bold">{selectedPlan.priceStr}</span>
+                    </div>
+
+                    {/* QR Code */}
+                    <div className="inline-block p-2 bg-white rounded-2xl shadow-xl">
+                      <img 
+                        src="/upi_qr.jpg" 
+                        alt="Amar Max Google Pay QR" 
+                        className="w-40 h-auto object-contain rounded-xl"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-xs">
+                      <p className="text-zinc-400">Payee: <strong className="text-white">{merchantName}</strong></p>
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="font-mono text-zinc-300 font-bold bg-[#121316] px-2.5 py-1 rounded-lg border border-white/5 select-all">
+                          {merchantUpi}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleCopyUpi}
+                          className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>{copiedUpi ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-zinc-300">
+                        12-Digit UPI UTR / Transaction Ref <span className="text-emerald-400">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowPaymentStep(false)}
+                        className="text-[10px] text-zinc-400 hover:text-white underline cursor-pointer"
+                      >
+                        Change Email / Plan
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      maxLength={12}
+                      required
+                      value={upiUtr}
+                      onChange={(e) => setUpiUtr(e.target.value.replace(/\D/g, ''))}
+                      placeholder="e.g. 423589123456 (12 digits)"
+                      className="w-full bg-[#1a1b20] text-center font-mono text-sm text-emerald-400 py-3 rounded-2xl border border-white/10 focus:border-emerald-500 outline-none transition tracking-wider"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || upiUtr.length !== 12}
+                    className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-emerald-600/20 transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {loading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Processing Payment...</span>
+                        <span>Verifying & Sending License...</span>
                       </>
                     ) : (
                       <>
-                        <Lock className="w-4 h-4" />
-                        <span>Pay {selectedPlan.priceStr} & Unlock VIP Turbo</span>
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Confirm Payment & Get License Key</span>
                       </>
                     )}
                   </button>
@@ -602,84 +469,41 @@ export default function VipModal() {
             </div>
           )}
 
-          {/* TAB 3: REDEEM LICENSE KEY */}
-          {activeTab === 'redeem' && (
-            <form onSubmit={handleRedeem} className="space-y-4">
-              <div className="p-4 rounded-3xl bg-[#24252f] border border-white/5 space-y-3">
-                <label className="block text-xs font-bold text-white">
-                  Enter your VIP License Key:
+          {/* TAB 2: I ALREADY PAID (RESTORE AD-FREE) */}
+          {activeTab === 'restore' && (
+            <form onSubmit={handleRestoreKey} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-zinc-300">
+                  License Key
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    required
-                    value={redeemKey}
-                    onChange={(e) => setRedeemKey(e.target.value)}
-                    placeholder="e.g. VIP-PRO-2026 or TG-VIP-..."
-                    className="flex-1 bg-[#1a1b22] border border-white/10 focus:border-amber-400 rounded-2xl px-4 py-3 text-xs text-white font-mono placeholder:text-zinc-500 outline-none uppercase"
-                  />
-                  <button
-                    type="submit"
-                    disabled={loading || !redeemKey.trim()}
-                    className="px-5 py-3 bg-[#f0fc54] hover:bg-[#e4ef4a] disabled:opacity-50 text-black font-extrabold text-xs rounded-2xl shadow transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                    <span>Activate</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-2xl bg-[#24252f]/40 border border-white/5 text-[11px] text-zinc-400 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Keys are authenticated strictly against the official registry database.</span>
-              </div>
-            </form>
-          )}
-
-          {/* TAB 4: RECEIPT / SUCCESS VOUCHER */}
-          {activeTab === 'receipt' && activeReceipt && (
-            <div className="p-6 rounded-3xl bg-[#24252f] border border-emerald-500/30 text-center space-y-4 animate-fadeIn">
-              <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto animate-bounce" />
-              <div>
-                <h4 className="text-lg font-black text-white">Payment Verified & VIP Activated!</h4>
-                <p className="text-xs text-zinc-400 mt-1">Thank you for supporting TuneGrab Studio.</p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#1a1b22] border border-white/5 text-left text-xs space-y-2 font-mono">
-                <div className="flex justify-between border-b border-white/5 pb-1 text-zinc-400">
-                  <span>VIP Plan:</span>
-                  <span className="text-white font-bold">{activeReceipt.plan}</span>
-                </div>
-                <div className="flex justify-between border-b border-white/5 pb-1 text-zinc-400">
-                  <span>Amount:</span>
-                  <span className="text-emerald-400 font-bold">{activeReceipt.amount}</span>
-                </div>
-                <div className="flex justify-between border-b border-white/5 pb-1 text-zinc-400">
-                  <span>UTR / Txn Ref:</span>
-                  <span className="text-zinc-200">{activeReceipt.utr}</span>
-                </div>
-                <div className="flex justify-between pt-1">
-                  <span className="text-amber-400 font-bold">VIP License Key:</span>
-                  <span className="text-[#f0fc54] font-black">{activeReceipt.key}</span>
-                </div>
+                <input
+                  type="text"
+                  required
+                  value={restoreKey}
+                  onChange={(e) => setRestoreKey(e.target.value)}
+                  placeholder="TG-XXXX-XXXX-XXXX"
+                  className="w-full bg-[#1a1b20] text-xs font-mono text-white px-4 py-3 rounded-2xl border border-white/10 focus:border-emerald-500 outline-none transition uppercase"
+                />
+                <p className="text-[11px] text-zinc-500 leading-normal pt-1">
+                  Check your email for the license key sent at checkout. This does not accept a Transaction Hash.
+                </p>
               </div>
 
               <button
-                onClick={closeVipModal}
-                className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition cursor-pointer"
+                type="submit"
+                disabled={loading || !restoreKey.trim()}
+                className="w-full py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-emerald-600/20 transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                Start Using VIP Turbo Features
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                <span>Restore Ad-Free</span>
               </button>
-            </div>
+            </form>
           )}
-        </div>
 
-        {/* Footer */}
-        <div className="px-6 py-3.5 bg-[#14151a] border-t border-white/5 flex items-center justify-between text-[11px] text-zinc-400">
-          <span>🔒 256-bit Encrypted & Automated Verification</span>
-          <button onClick={closeVipModal} className="hover:text-zinc-200 cursor-pointer">
-            Close
-          </button>
+          <div className="text-center pt-1 text-[10px] text-zinc-500 flex items-center justify-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Instant Cloud Sync • Ad-Free on All Browsers</span>
+          </div>
         </div>
       </div>
     </div>

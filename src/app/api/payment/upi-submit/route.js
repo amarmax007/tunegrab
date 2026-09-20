@@ -70,6 +70,21 @@ export async function POST(request) {
       updatedUser = updateUserVip(userId, generatedVipKey, durationDays);
     }
 
+    // Automatically send license key to user's real email inbox
+    if (userEmail && userEmail.includes('@')) {
+      try {
+        const { sendLicenseKeyEmail } = await import('@/lib/mailer.js');
+        await sendLicenseKeyEmail({
+          email: userEmail,
+          key: generatedVipKey,
+          plan: normalizedPlan,
+          amount,
+        });
+      } catch (mailErr) {
+        console.warn('Could not dispatch key email:', mailErr.message);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       key: generatedVipKey,

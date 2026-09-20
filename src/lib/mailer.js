@@ -87,3 +87,66 @@ export async function sendOtpEmail({ email, code, purpose = 'registration' }) {
     throw new Error(`Failed to deliver email to ${email}: ${err.message}`);
   }
 }
+
+/**
+ * Sends official VIP Premium License Key directly to user's inbox
+ */
+export async function sendLicenseKeyEmail({ email, key, plan, amount }) {
+  const transporter = getTransporter();
+
+  console.log(`\n========================================`);
+  console.log(`⚡ [TuneGrab Premium License Key Dispatch]`);
+  console.log(`To: ${email}`);
+  console.log(`License Key: ${key}`);
+  console.log(`Plan: ${plan} (₹${amount})`);
+  console.log(`========================================\n`);
+
+  if (!transporter) return { sent: false };
+
+  const subject = `⚡ Your TuneGrab Premium License Key (${plan.toUpperCase()})`;
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; background: #121316; color: #ffffff; border-radius: 24px; padding: 36px; border: 1px solid #23252e;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 6px 14px; color: #10b981; font-size: 11px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">
+          ⚡ PAYMENT VERIFIED
+        </div>
+        <h1 style="color: #ffffff; font-size: 26px; font-weight: 900; margin: 12px 0 4px 0; letter-spacing: -0.5px;">Welcome to TuneGrab Premium</h1>
+        <p style="color: #8e8f9c; font-size: 13px; margin: 0;">100% Ad-Free • 3x Fast Downloads • Unlimited Batch ZIP</p>
+      </div>
+
+      <div style="background: #1a1b22; border-radius: 18px; padding: 24px; text-align: center; border: 1px solid rgba(255,255,255,0.06);">
+        <p style="color: #9ca3af; font-size: 13px; margin-top: 0;">Your Official Premium License Key is:</p>
+        
+        <div style="background: #0f1015; border: 2px solid #10b981; border-radius: 14px; padding: 18px; margin: 18px 0; display: inline-block; width: 85%;">
+          <span style="font-family: 'Courier New', Courier, monospace; font-size: 24px; font-weight: 900; letter-spacing: 3px; color: #10b981;">${key}</span>
+        </div>
+
+        <div style="text-align: left; background: #121316; border-radius: 12px; padding: 14px; margin-top: 14px; font-size: 12px; color: #d1d5db; line-height: 1.6;">
+          <div>• <strong>Plan:</strong> ${plan.toUpperCase()} (₹${amount})</div>
+          <div>• <strong>Status:</strong> Active & Linked to ${email}</div>
+          <div>• <strong>Device Sync:</strong> Click <em>"I already paid"</em> on any phone/PC and enter this key to restore Ad-Free!</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 24px; text-align: center; font-size: 11px; color: #6b7280;">
+        <p style="margin: 0;">Need help? Contact support or reply to this email.</p>
+        <p style="margin-top: 6px;">&copy; ${new Date().getFullYear()} TuneGrab Universal Music Studio.</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    const sender = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL_USER || 'mramarmax@gmail.com';
+    const info = await transporter.sendMail({
+      from: `"TuneGrab Studio" <${sender}>`,
+      to: email,
+      subject,
+      html,
+    });
+    return { sent: true, messageId: info.messageId };
+  } catch (err) {
+    console.error('Failed to send license key email:', err);
+    return { sent: false, error: err.message };
+  }
+}
