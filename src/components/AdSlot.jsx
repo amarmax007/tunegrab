@@ -49,6 +49,13 @@ export default function AdSlot({ type = 'banner', className = '', slotId = 'defa
     // Pick deterministic ad based on slotId or random
     const idx = Math.floor(Math.random() * SPONSORED_ADS.length);
     setAdIndex(idx);
+
+    // Initialize Google AdSense units if present
+    try {
+      if (typeof window !== 'undefined') {
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      }
+    } catch (e) {}
   }, [slotId]);
 
   // If user is VIP or ad is dismissed, do NOT show any ads!
