@@ -207,6 +207,8 @@ export default function AppleMusicPage() {
         title="Apple Music Top 100 Global" 
         tracks={appleTopHits}
       />
+
+      <AdSlot type="native" slotId="apple-native" />
     </StudioLayout>
   );
 }

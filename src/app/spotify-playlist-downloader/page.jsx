@@ -200,6 +200,8 @@ export default function SpotifyPlaylistPage() {
         title="Popular Global Playlists (1-Click ZIP Available)" 
         tracks={topPlaylists}
       />
+
+      <AdSlot type="native" slotId="playlist-native" />
     </StudioLayout>
   );
 }

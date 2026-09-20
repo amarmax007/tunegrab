@@ -200,6 +200,8 @@ export default function SpotifyAlbumPage() {
         title="Featured Studio Albums" 
         tracks={legendaryAlbums}
       />
+
+      <AdSlot type="native" slotId="album-native" />
     </StudioLayout>
   );
 }

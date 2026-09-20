@@ -102,6 +102,14 @@ export default function RootLayout({ children }) {
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        {/* Google AdSense / Monetag Script Integration */}
+        {process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID && (
+          <script
+            async
+            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID}`}
+            crossOrigin="anonymous"
+          />
+        )}
       </head>
       <body suppressHydrationWarning className="min-h-screen bg-[#141416] text-white font-sans antialiased selection:bg-[#f0fc54] selection:text-black">
         <ThemeProvider>

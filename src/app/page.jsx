@@ -49,6 +49,9 @@ export default function HomePage() {
                 title="Trending Songs (Ready to Download)"
                 onSeeAll={() => router.push('/results?q=Trending%20Global%20Hits')}
               />
+
+              {/* Native In-Feed Sponsored Card (hidden for VIP) */}
+              <AdSlot type="native" slotId="home-native" />
             </div>
           </main>
 

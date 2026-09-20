@@ -183,10 +183,14 @@ function ResultsContent() {
                       : (isUrl ? 'Download Ready (320kbps MP3)' : `Search: "${queryParam}"`);
 
                     return (
-                      <StudioTrackList
-                        tracks={filteredItems}
-                        title={cleanHeading}
-                      />
+                      <>
+                        <StudioTrackList
+                          tracks={filteredItems}
+                          title={cleanHeading}
+                        />
+                        {/* Native Sponsored Card (hidden for VIP) */}
+                        <AdSlot type="native" slotId="results-native" />
+                      </>
                     );
                   })()}
 
