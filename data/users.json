@@ -1,0 +1,95 @@
+[
+  {
+    "userId": "TG-9200",
+    "name": "Amar Max",
+    "email": "test_amar@tunegrab.app",
+    "passwordHash": "3a7f2239e03d93d1115f3e617708f804f05fec0e50034e3b9bea8f97f1230e95",
+    "createdAt": 1789861386527,
+    "isVip": false,
+    "vipKey": null,
+    "vipExpiry": null,
+    "downloads": [],
+    "favorites": []
+  },
+  {
+    "userId": "TG-7471",
+    "name": "Amar Max",
+    "email": "amar_test@tunegrab.app",
+    "passwordHash": "3a7f2239e03d93d1115f3e617708f804f05fec0e50034e3b9bea8f97f1230e95",
+    "createdAt": 1789861390981,
+    "isVip": false,
+    "vipKey": null,
+    "vipExpiry": null,
+    "downloads": [
+      {
+        "id": "1789861390982",
+        "title": "Blinding Lights",
+        "artist": "The Weeknd",
+        "duration": 200,
+        "downloadedAt": 1789861390982
+      }
+    ],
+    "favorites": [
+      {
+        "id": "track-1",
+        "title": "Snowfall",
+        "artist": "Oneheart",
+        "duration": 180,
+        "previewUrl": null,
+        "favoritedAt": 1789861390982
+      }
+    ]
+  },
+  {
+    "userId": "TG-4486",
+    "name": "abcd",
+    "email": "asdfhhere@gmail.com",
+    "passwordHash": "82613a5d75b14f07f48bbda807a74ea22d10ed96e893cbdc59666efbaf72529c",
+    "createdAt": 1789862612199,
+    "isVip": false,
+    "vipKey": null,
+    "vipExpiry": null,
+    "downloads": [],
+    "favorites": []
+  },
+  {
+    "userId": "TG-2720",
+    "name": "Amar Max",
+    "email": "amar@gmail.com",
+    "passwordHash": "3f757cd519f974656b7bcdf77ccd869c1c0e53473668478323a9da2cf0ad71be",
+    "createdAt": 1789862779866,
+    "isVip": false,
+    "vipKey": null,
+    "vipExpiry": null,
+    "downloads": [],
+    "favorites": [],
+    "authProvider": "email_otp"
+  },
+  {
+    "userId": "TG-7160",
+    "name": "Amar Max",
+    "email": "amarmax@gmail.com",
+    "passwordHash": "a6fcd607bab7d7dc266ba75912c2083c4a6bc85c3cdbddb54e57d3ca0a9301b6",
+    "createdAt": 1789862812589,
+    "isVip": false,
+    "vipKey": null,
+    "vipExpiry": null,
+    "downloads": [],
+    "favorites": [],
+    "authProvider": "email_otp",
+    "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"
+  },
+  {
+    "userId": "TG-5331",
+    "name": "amar",
+    "email": "amarmax.me@gmail.com",
+    "passwordHash": "49c75460e42a192be0fed9737611f9738314010a4f9fedb8fb1b8f26b26240b5",
+    "createdAt": 1789864781752,
+    "isVip": false,
+    "vipKey": null,
+    "vipExpiry": null,
+    "downloads": [],
+    "favorites": [],
+    "authProvider": "email_otp"
+  }
+]
