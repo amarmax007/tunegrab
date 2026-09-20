@@ -1,83 +1,35 @@
 import { NextResponse } from 'next/server';
-import { updateUserVip } from '@/lib/userDb';
-
-// Preset VIP master keys and dynamic pattern validator
-const VALID_PROMO_KEYS = new Set([
-  'VIP-PRO-2026',
-  'PREMIUM320',
-  'TURBO-MUSIC-VIP',
-  'SPOTISAVER-VIP',
-  'UNLIMITED-2026',
-]);
+import { verifyAndRedeemKey } from '@/lib/userDb';
 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { key, action, userId } = body;
+    const { key, userId } = body;
 
-    // Simulated Checkout payment key generator
-    if (action === 'generate_key') {
-      const plan = body.plan || 'monthly';
-      const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const generatedKey = `VIP-${plan.toUpperCase()}-${randomPart}-${Date.now().toString(36).toUpperCase()}`;
-      const durationDays = plan === 'weekly' ? 7 : plan === 'yearly' ? 365 : plan === 'lifetime' ? 3650 : 30;
-
-      if (userId) {
-        updateUserVip(userId, generatedKey, durationDays);
-      }
-
-      return NextResponse.json({
-        success: true,
-        key: generatedKey,
-        durationDays,
-        message: 'VIP Key generated and activated successfully!',
-      });
-    }
-
-    if (!key || typeof key !== 'string') {
-      return NextResponse.json({ error: 'Please enter a valid VIP license key.' }, { status: 400 });
+    if (!key || typeof key !== 'string' || key.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Please enter a valid VIP license key.' },
+        { status: 400 }
+      );
     }
 
     const cleanKey = key.trim().toUpperCase();
 
-    // Check preset keys
-    if (VALID_PROMO_KEYS.has(cleanKey)) {
-      if (userId) {
-        updateUserVip(userId, cleanKey, 365);
-      }
-      return NextResponse.json({
-        success: true,
-        key: cleanKey,
-        durationDays: 365,
-        plan: 'PRO Lifetime',
-        message: 'VIP License Activated! Enjoy 100% Ad-Free & Unlimited Batch Downloads.',
-      });
-    }
+    // Verify key strictly in DB
+    const redemptionResult = verifyAndRedeemKey(cleanKey, userId || null);
 
-    // Check dynamic VIP pattern: VIP-PLAN-RANDOM-TIMESTAMP
-    if (cleanKey.startsWith('VIP-')) {
-      const parts = cleanKey.split('-');
-      if (parts.length >= 3) {
-        const days = parts[1] === 'WEEKLY' ? 7 : parts[1] === 'LIFETIME' ? 3650 : 30;
-        if (userId) {
-          updateUserVip(userId, cleanKey, days);
-        }
-        return NextResponse.json({
-          success: true,
-          key: cleanKey,
-          durationDays: days,
-          plan: parts[1] || 'PRO',
-          message: 'VIP License Verified Successfully!',
-        });
-      }
-    }
-
-    return NextResponse.json(
-      { error: 'Invalid or expired VIP license key. Please check or purchase a new key.' },
-      { status: 400 }
-    );
+    return NextResponse.json({
+      success: true,
+      key: redemptionResult.key,
+      plan: redemptionResult.plan,
+      durationDays: redemptionResult.durationDays,
+      message: `🎉 VIP License (${redemptionResult.plan.toUpperCase()}) Verified Successfully! 100% Ad-Free & Unlimited 320kbps Batch Downloads Enabled.`,
+    });
   } catch (error) {
     console.error('VIP verify error:', error);
-    return NextResponse.json({ error: 'Failed to process VIP key' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || 'Invalid or unverified VIP license key.' },
+      { status: 400 }
+    );
   }
 }

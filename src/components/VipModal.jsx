@@ -29,7 +29,7 @@ export default function VipModal() {
   const { user, syncUserWithVip } = useAuth();
   
   const [activeTab, setActiveTab] = useState('plans'); // 'plans' | 'checkout' | 'redeem' | 'receipt'
-  const [selectedPlan, setSelectedPlan] = useState({ id: 'lifetime', name: 'Lifetime VIP', price: 499, priceStr: '₹499', period: 'Permanent Access', days: 3650 });
+  const [selectedPlan, setSelectedPlan] = useState({ id: 'monthly', name: 'Monthly Pro', price: 199, priceStr: '₹199', period: '30 Days', days: 30 });
   const [redeemKey, setRedeemKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
@@ -40,6 +40,11 @@ export default function VipModal() {
   const [payerUpiId, setPayerUpiId] = useState('');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [activeReceipt, setActiveReceipt] = useState(null);
+
+  // Card form state
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
 
   // Merchant details
   const merchantUpi = process.env.NEXT_PUBLIC_UPI_ID || 'amarmax.me@okhdfcbank';
@@ -66,7 +71,7 @@ export default function VipModal() {
       period: '30 Days',
       days: 30,
       badge: 'Popular',
-      popular: false,
+      popular: true,
     },
     {
       id: 'lifetime',
@@ -76,11 +81,9 @@ export default function VipModal() {
       period: 'Permanent Access',
       days: 3650,
       badge: 'Best Value',
-      popular: true,
+      popular: false,
     },
   ];
-
-  const upiPayUri = `upi://pay?pa=${encodeURIComponent(merchantUpi)}&pn=${encodeURIComponent(merchantName)}&am=${selectedPlan.price}&cu=INR&tn=TuneGrab%20VIP%20${encodeURIComponent(selectedPlan.name)}`;
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText(merchantUpi);
@@ -127,8 +130,15 @@ export default function VipModal() {
 
   const handleVerifyUpiPayment = async (e) => {
     e.preventDefault();
-    if (!upiUtr.trim()) {
-      setStatusMsg({ type: 'error', text: 'Please enter the 12-digit UPI UTR / Transaction Reference Number.' });
+    const cleanUtr = upiUtr.trim().replace(/\s+/g, '');
+
+    // Strict 12-digit numeric validation on client side first
+    const utrRegex = /^\d{12}$/;
+    if (!utrRegex.test(cleanUtr)) {
+      setStatusMsg({ 
+        type: 'error', 
+        text: 'Invalid UTR format. A valid UPI Reference Number (UTR) is strictly 12 numeric digits (e.g. 425612345678). Please verify from your GPay / PhonePe / Paytm receipt.' 
+      });
       return;
     }
 
@@ -141,7 +151,7 @@ export default function VipModal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan: selectedPlan.id,
-          utr: upiUtr.trim(),
+          utr: cleanUtr,
           payerUpi: payerUpiId.trim() || 'UPI App',
           userId: user?.userId || null,
           userEmail: user?.email || null,
@@ -160,7 +170,7 @@ export default function VipModal() {
           key: data.key,
           plan: selectedPlan.name,
           amount: selectedPlan.priceStr,
-          utr: upiUtr.trim(),
+          utr: cleanUtr,
           date: new Date().toLocaleString(),
         });
         setActiveTab('receipt');
@@ -172,7 +182,21 @@ export default function VipModal() {
     }
   };
 
-  const handleGatewayPayment = async () => {
+  const handleGatewayPayment = async (e) => {
+    e.preventDefault();
+    if (!cardNumber || cardNumber.replace(/\s/g, '').length < 16) {
+      setStatusMsg({ type: 'error', text: 'Please enter a valid 16-digit card number.' });
+      return;
+    }
+    if (!cardExpiry || !cardExpiry.includes('/')) {
+      setStatusMsg({ type: 'error', text: 'Please enter a valid card expiry (MM/YY).' });
+      return;
+    }
+    if (!cardCvv || cardCvv.length < 3) {
+      setStatusMsg({ type: 'error', text: 'Please enter a valid 3-digit CVV.' });
+      return;
+    }
+
     setLoading(true);
     setStatusMsg({ type: '', text: '' });
 
@@ -487,16 +511,17 @@ export default function VipModal() {
                       <input
                         type="text"
                         required
+                        maxLength={12}
                         value={upiUtr}
-                        onChange={(e) => setUpiUtr(e.target.value)}
-                        placeholder="e.g. 423589123456 or Txn ID"
+                        onChange={(e) => setUpiUtr(e.target.value.replace(/\D/g, ''))}
+                        placeholder="e.g. 423589123456 (12 digits)"
                         className="w-full bg-[#1a1b22] text-xs sm:text-sm text-white font-mono px-4 py-3 rounded-2xl border border-white/10 focus:border-[#f0fc54] outline-none"
                       />
                     </div>
 
                     <button
                       type="submit"
-                      disabled={loading || !upiUtr.trim()}
+                      disabled={loading || upiUtr.length !== 12}
                       className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs sm:text-sm shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
                       {loading ? (
@@ -515,13 +540,17 @@ export default function VipModal() {
                 </div>
               ) : (
                 /* Card & Online Gateway Checkout */
-                <div className="p-4 rounded-3xl bg-[#24252f] border border-white/5 space-y-4">
+                <form onSubmit={handleGatewayPayment} className="p-4 rounded-3xl bg-[#24252f] border border-white/5 space-y-4">
                   <div className="space-y-1">
-                    <label className="block text-xs text-zinc-400">Card Number</label>
+                    <label className="block text-xs text-zinc-400">Card Number (16 Digits)</label>
                     <input
                       type="text"
-                      defaultValue="4532 •••• •••• 8892"
-                      className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono"
+                      required
+                      maxLength={19}
+                      value={cardNumber}
+                      onChange={(e) => setCardNumber(e.target.value)}
+                      placeholder="4532 •••• •••• 8892"
+                      className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono focus:border-amber-400 outline-none"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -529,29 +558,37 @@ export default function VipModal() {
                       <label className="block text-xs text-zinc-400">Expiry (MM/YY)</label>
                       <input
                         type="text"
-                        defaultValue="12/28"
-                        className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono"
+                        required
+                        maxLength={5}
+                        value={cardExpiry}
+                        onChange={(e) => setCardExpiry(e.target.value)}
+                        placeholder="12/28"
+                        className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono focus:border-amber-400 outline-none"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="block text-xs text-zinc-400">CVV</label>
+                      <label className="block text-xs text-zinc-400">CVV (3 Digits)</label>
                       <input
                         type="password"
-                        defaultValue="888"
-                        className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono"
+                        required
+                        maxLength={4}
+                        value={cardCvv}
+                        onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))}
+                        placeholder="888"
+                        className="w-full bg-[#1a1b22] border border-white/10 rounded-2xl px-4 py-3 text-xs text-zinc-300 font-mono focus:border-amber-400 outline-none"
                       />
                     </div>
                   </div>
 
                   <button
-                    onClick={handleGatewayPayment}
+                    type="submit"
                     disabled={loading}
                     className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-extrabold text-xs sm:text-sm shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                   >
                     {loading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Processing Instant Payment...</span>
+                        <span>Processing Payment...</span>
                       </>
                     ) : (
                       <>
@@ -560,7 +597,7 @@ export default function VipModal() {
                       </>
                     )}
                   </button>
-                </div>
+                </form>
               )}
             </div>
           )}
@@ -570,15 +607,16 @@ export default function VipModal() {
             <form onSubmit={handleRedeem} className="space-y-4">
               <div className="p-4 rounded-3xl bg-[#24252f] border border-white/5 space-y-3">
                 <label className="block text-xs font-bold text-white">
-                  Enter your VIP License Key or Promo Code:
+                  Enter your VIP License Key:
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
+                    required
                     value={redeemKey}
                     onChange={(e) => setRedeemKey(e.target.value)}
-                    placeholder="e.g. VIP-PRO-2026 or PREMIUM320"
-                    className="flex-1 bg-[#1a1b22] border border-white/10 focus:border-amber-400 rounded-2xl px-4 py-3 text-xs text-white font-mono placeholder:text-zinc-500 outline-none"
+                    placeholder="e.g. VIP-PRO-2026 or TG-VIP-..."
+                    className="flex-1 bg-[#1a1b22] border border-white/10 focus:border-amber-400 rounded-2xl px-4 py-3 text-xs text-white font-mono placeholder:text-zinc-500 outline-none uppercase"
                   />
                   <button
                     type="submit"
@@ -589,14 +627,11 @@ export default function VipModal() {
                     <span>Activate</span>
                   </button>
                 </div>
-                <p className="text-[11px] text-zinc-400">
-                  💡 Tip: You can try sample promo code <code className="text-[#f0fc54] bg-[#1a1b22] px-1.5 py-0.5 rounded font-mono font-bold">VIP-PRO-2026</code> or <code className="text-[#f0fc54] bg-[#1a1b22] px-1.5 py-0.5 rounded font-mono font-bold">PREMIUM320</code>
-                </p>
               </div>
 
               <div className="p-3 rounded-2xl bg-[#24252f]/40 border border-white/5 text-[11px] text-zinc-400 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Keys are authenticated securely and stored safely in your browser session & cloud profile.</span>
+                <span>Keys are authenticated strictly against the official registry database.</span>
               </div>
             </form>
           )}

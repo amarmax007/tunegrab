@@ -7,7 +7,7 @@ export async function POST(request) {
     const { email } = body;
 
     if (!email) {
-      return NextResponse.json({ error: 'Email address is required.' }, { status: 400 });
+      return NextResponse.json({ error: 'Valid email address is required.' }, { status: 400 });
     }
 
     const otpData = generateEmailOtp(email);
@@ -16,11 +16,10 @@ export async function POST(request) {
       success: true,
       email: otpData.email,
       expiresInSeconds: otpData.expiresInSeconds,
-      // For instant realistic UI verification, return the generated security PIN
-      code: otpData.code,
-      message: `Verification code sent to ${otpData.email}. Enter the 6-digit code to continue.`,
+      // Security: Never leak the plain verification code to the client response
+      message: `A 6-digit security verification code has been dispatched to ${otpData.email}. Please enter it below.`,
     });
   } catch (err) {
-    return NextResponse.json({ error: err.message || 'Failed to send OTP.' }, { status: 400 });
+    return NextResponse.json({ error: err.message || 'Failed to send OTP verification code.' }, { status: 400 });
   }
 }

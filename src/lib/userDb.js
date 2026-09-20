@@ -7,13 +7,24 @@ const DATA_DIR = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || p
   : path.join(process.cwd(), 'data');
 
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const TRANSACTIONS_FILE = path.join(DATA_DIR, 'transactions.json');
+const VIP_KEYS_FILE = path.join(DATA_DIR, 'vip_keys.json');
 
-// In-Memory OTP Store: email -> { code, expiresAt, purpose }
+// In-Memory OTP Store: email -> { code, expiresAt, attempts }
 const otpStore = new Map();
-// In-Memory Users Cache fallback for serverless environments
-let memoryUsersCache = null;
 
-// Ensure data directory and users.json exist
+// In-Memory Caches for serverless lambdas
+let memoryUsersCache = null;
+let memoryTransactionsCache = null;
+let memoryVipKeysCache = null;
+
+// Preset initial master VIP keys for testing & admin
+const INITIAL_MASTER_KEYS = [
+  { key: 'VIP-PRO-2026', plan: 'lifetime', durationDays: 3650, isRedeemed: false, redeemedBy: null },
+  { key: 'TG-VIP-PREMIUM320', plan: 'monthly', durationDays: 30, isRedeemed: false, redeemedBy: null },
+  { key: 'TG-VIP-AMARMAX', plan: 'lifetime', durationDays: 3650, isRedeemed: false, redeemedBy: null },
+];
+
 function ensureDb() {
   try {
     if (!fs.existsSync(DATA_DIR)) {
@@ -22,8 +33,14 @@ function ensureDb() {
     if (!fs.existsSync(USERS_FILE)) {
       fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2), 'utf-8');
     }
+    if (!fs.existsSync(TRANSACTIONS_FILE)) {
+      fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify([], null, 2), 'utf-8');
+    }
+    if (!fs.existsSync(VIP_KEYS_FILE)) {
+      fs.writeFileSync(VIP_KEYS_FILE, JSON.stringify(INITIAL_MASTER_KEYS, null, 2), 'utf-8');
+    }
   } catch (err) {
-    // Read-only filesystem fallback
+    // Read-only environment fallback
   }
 }
 
@@ -37,7 +54,7 @@ function readUsers() {
       return parsed;
     }
   } catch (err) {
-    console.warn('Filesystem read warning, using memory cache:', err?.message);
+    console.warn('Users DB read warning:', err?.message);
   }
   return memoryUsersCache || [];
 }
@@ -48,12 +65,62 @@ function writeUsers(users) {
   try {
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
   } catch (err) {
-    console.warn('Filesystem write warning, persisted to memory cache:', err?.message);
+    console.warn('Users DB write warning:', err?.message);
+  }
+}
+
+function readTransactions() {
+  ensureDb();
+  try {
+    if (fs.existsSync(TRANSACTIONS_FILE)) {
+      const raw = fs.readFileSync(TRANSACTIONS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw) || [];
+      memoryTransactionsCache = parsed;
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('Transactions DB read warning:', err?.message);
+  }
+  return memoryTransactionsCache || [];
+}
+
+function writeTransactions(txs) {
+  memoryTransactionsCache = txs;
+  ensureDb();
+  try {
+    fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify(txs, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Transactions DB write warning:', err?.message);
+  }
+}
+
+function readVipKeys() {
+  ensureDb();
+  try {
+    if (fs.existsSync(VIP_KEYS_FILE)) {
+      const raw = fs.readFileSync(VIP_KEYS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw) || [];
+      memoryVipKeysCache = parsed;
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('VIP Keys DB read warning:', err?.message);
+  }
+  return memoryVipKeysCache || INITIAL_MASTER_KEYS;
+}
+
+function writeVipKeys(keys) {
+  memoryVipKeysCache = keys;
+  ensureDb();
+  try {
+    fs.writeFileSync(VIP_KEYS_FILE, JSON.stringify(keys, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('VIP Keys DB write warning:', err?.message);
   }
 }
 
 function hashPassword(password) {
-  return crypto.createHash('sha256').update(password + '_tunegrab_salt_2026').digest('hex');
+  return crypto.createHash('sha256').update(String(password) + '_tunegrab_secure_salt_2026').digest('hex');
 }
 
 function generateUserId() {
@@ -67,7 +134,6 @@ export function validateEmail(email) {
   const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(clean)) return false;
   
-  // Disallow suspicious / broken domains
   const domain = clean.split('@')[1];
   if (!domain || !domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) {
     return false;
@@ -76,23 +142,26 @@ export function validateEmail(email) {
 }
 
 /**
- * Generates and stores a 6-digit OTP verification PIN for an email
+ * Generates and securely stores a 6-digit OTP verification PIN
  */
 export function generateEmailOtp(email) {
   const cleanEmail = String(email).trim().toLowerCase();
   if (!validateEmail(cleanEmail)) {
-    throw new Error('Please enter a valid, real email address (e.g. name@gmail.com).');
+    throw new Error('Please enter a valid email address (e.g. name@gmail.com).');
   }
 
   // Generate 6-digit PIN
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes expiry
 
-  otpStore.set(cleanEmail, { code, expiresAt });
+  otpStore.set(cleanEmail, { code, expiresAt, attempts: 0 });
+
+  // Log on server for administration / debugging
+  console.log(`[TuneGrab Security OTP] Generated code for ${cleanEmail}: ${code}`);
 
   return {
     email: cleanEmail,
-    code,
+    code, // Returned for server mailers/logging, NOT sent directly to public UI
     expiresInSeconds: 600,
   };
 }
@@ -106,9 +175,13 @@ export function verifyEmailOtp(email, enteredCode, name = '') {
     throw new Error('Invalid email address format.');
   }
 
+  if (!enteredCode || String(enteredCode).trim().length !== 6) {
+    throw new Error('Please enter a complete 6-digit verification code.');
+  }
+
   const stored = otpStore.get(cleanEmail);
   if (!stored) {
-    throw new Error('No OTP request found for this email. Please request a new code.');
+    throw new Error('No OTP request found for this email. Please request a new verification code.');
   }
 
   if (Date.now() > stored.expiresAt) {
@@ -116,19 +189,24 @@ export function verifyEmailOtp(email, enteredCode, name = '') {
     throw new Error('The OTP code has expired. Please request a new verification code.');
   }
 
+  stored.attempts = (stored.attempts || 0) + 1;
+  if (stored.attempts > 5) {
+    otpStore.delete(cleanEmail);
+    throw new Error('Too many invalid attempts. Please request a fresh OTP.');
+  }
+
   if (String(stored.code).trim() !== String(enteredCode).trim()) {
     throw new Error('Incorrect 6-digit verification code. Please check and try again.');
   }
 
-  // OTP is verified! Consume it
+  // OTP verified! Clean it up
   otpStore.delete(cleanEmail);
 
-  // Check if user already exists
+  // Find or create user
   const users = readUsers();
   let user = users.find((u) => u.email === cleanEmail);
 
   if (!user) {
-    // Auto-create verified user
     let userId = generateUserId();
     while (users.some((u) => u.userId === userId)) {
       userId = generateUserId();
@@ -138,7 +216,7 @@ export function verifyEmailOtp(email, enteredCode, name = '') {
       userId,
       name: String(name).trim() || cleanEmail.split('@')[0],
       email: cleanEmail,
-      passwordHash: hashPassword(cleanEmail + '_verified_otp'),
+      passwordHash: hashPassword(cleanEmail + '_otp_verified_key'),
       createdAt: Date.now(),
       isVip: false,
       vipKey: null,
@@ -157,62 +235,25 @@ export function verifyEmailOtp(email, enteredCode, name = '') {
 }
 
 /**
- * Authenticates with Google OAuth
+ * Register a new user with strict validations
  */
-export function authenticateWithGoogle({ email, name, avatar }) {
-  const cleanEmail = String(email).trim().toLowerCase();
-  if (!validateEmail(cleanEmail)) {
-    throw new Error('Invalid Google account email.');
-  }
-
-  const users = readUsers();
-  let user = users.find((u) => u.email === cleanEmail);
-
-  if (!user) {
-    let userId = generateUserId();
-    while (users.some((u) => u.userId === userId)) {
-      userId = generateUserId();
-    }
-
-    user = {
-      userId,
-      name: String(name).trim() || 'Google User',
-      email: cleanEmail,
-      avatar: avatar || null,
-      passwordHash: hashPassword(cleanEmail + '_google_oauth'),
-      createdAt: Date.now(),
-      isVip: false,
-      vipKey: null,
-      vipExpiry: null,
-      downloads: [],
-      favorites: [],
-      authProvider: 'google',
-    };
-
-    users.push(user);
-    writeUsers(users);
-  } else if (avatar && !user.avatar) {
-    user.avatar = avatar;
-    writeUsers(users);
-  }
-
-  const { passwordHash, ...safeUser } = user;
-  return safeUser;
-}
-
 export function registerUser({ name, email, password }) {
   const cleanEmail = String(email).trim().toLowerCase();
   if (!validateEmail(cleanEmail)) {
-    throw new Error('Please enter a valid, real email address (e.g. name@gmail.com).');
+    throw new Error('Please enter a valid email address (e.g. name@gmail.com).');
+  }
+
+  if (!name || String(name).trim().length < 2) {
+    throw new Error('Please enter your full name (at least 2 characters).');
+  }
+
+  if (!password || String(password).length < 6) {
+    throw new Error('Password must be at least 6 characters long.');
   }
 
   const users = readUsers();
   if (users.some((u) => u.email === cleanEmail)) {
-    throw new Error('An account with this email already exists. Please sign in instead.');
-  }
-
-  if (!password || password.length < 4) {
-    throw new Error('Password must be at least 4 characters.');
+    throw new Error('An account with this email address already exists. Please sign in instead.');
   }
 
   let userId = generateUserId();
@@ -222,7 +263,7 @@ export function registerUser({ name, email, password }) {
 
   const newUser = {
     userId,
-    name: String(name).trim() || cleanEmail.split('@')[0],
+    name: String(name).trim(),
     email: cleanEmail,
     passwordHash: hashPassword(password),
     createdAt: Date.now(),
@@ -241,7 +282,14 @@ export function registerUser({ name, email, password }) {
   return safeUser;
 }
 
+/**
+ * Login user with strict credentials validation
+ */
 export function loginUser({ identifier, password }) {
+  if (!identifier || !password) {
+    throw new Error('Please enter your User ID/Email and password.');
+  }
+
   const users = readUsers();
   const cleanId = String(identifier).trim().toLowerCase();
 
@@ -252,12 +300,56 @@ export function loginUser({ identifier, password }) {
   );
 
   if (!user) {
-    throw new Error('No account found with this User ID or Email. Please register first.');
+    throw new Error('No registered account found with this User ID / Email. Please sign up first.');
   }
 
   const targetHash = hashPassword(password);
   if (user.passwordHash !== targetHash) {
     throw new Error('Incorrect password. Please verify and try again.');
+  }
+
+  const { passwordHash, ...safeUser } = user;
+  return safeUser;
+}
+
+/**
+ * Authenticates with Google OAuth / SSO
+ */
+export function authenticateWithGoogle({ email, name, avatar }) {
+  const cleanEmail = String(email).trim().toLowerCase();
+  if (!validateEmail(cleanEmail)) {
+    throw new Error('Invalid Google account email address.');
+  }
+
+  const users = readUsers();
+  let user = users.find((u) => u.email === cleanEmail);
+
+  if (!user) {
+    let userId = generateUserId();
+    while (users.some((u) => u.userId === userId)) {
+      userId = generateUserId();
+    }
+
+    user = {
+      userId,
+      name: String(name).trim() || 'Google User',
+      email: cleanEmail,
+      avatar: avatar || null,
+      passwordHash: hashPassword(cleanEmail + '_google_auth_2026'),
+      createdAt: Date.now(),
+      isVip: false,
+      vipKey: null,
+      vipExpiry: null,
+      downloads: [],
+      favorites: [],
+      authProvider: 'google',
+    };
+
+    users.push(user);
+    writeUsers(users);
+  } else if (avatar && !user.avatar) {
+    user.avatar = avatar;
+    writeUsers(users);
   }
 
   const { passwordHash, ...safeUser } = user;
@@ -329,7 +421,6 @@ export function updateUserVip(userId, key, durationDays = 30) {
   const users = readUsers();
   const index = users.findIndex((u) => u.userId === userId || u.email === userId);
   if (index === -1) {
-    // If not found by userId, check if key is valid globally
     return { isVip: true, vipKey: key, vipExpiry: durationDays ? Date.now() + durationDays * 24 * 60 * 60 * 1000 : null };
   }
 
@@ -344,18 +435,19 @@ export function updateUserVip(userId, key, durationDays = 30) {
   return safeUser;
 }
 
-/**
- * Resets user password after verifying 6-digit OTP code
- */
 export function resetPasswordWithOtp({ email, code, newPassword }) {
   const cleanEmail = String(email).trim().toLowerCase();
   if (!validateEmail(cleanEmail)) {
     throw new Error('Please enter a valid email address.');
   }
 
+  if (!code || String(code).trim().length !== 6) {
+    throw new Error('Please enter the 6-digit verification code.');
+  }
+
   const stored = otpStore.get(cleanEmail);
   if (!stored) {
-    throw new Error('No OTP request found for this email. Please request a new code.');
+    throw new Error('No password reset OTP request found for this email. Please request a new code.');
   }
 
   if (Date.now() > stored.expiresAt) {
@@ -367,8 +459,8 @@ export function resetPasswordWithOtp({ email, code, newPassword }) {
     throw new Error('Incorrect 6-digit verification code. Please check and try again.');
   }
 
-  if (!newPassword || newPassword.length < 4) {
-    throw new Error('New password must be at least 4 characters long.');
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error('New password must be at least 6 characters long.');
   }
 
   otpStore.delete(cleanEmail);
@@ -386,9 +478,6 @@ export function resetPasswordWithOtp({ email, code, newPassword }) {
   return safeUser;
 }
 
-/**
- * Updates user profile information
- */
 export function updateUserProfile(userId, { name, avatar }) {
   const users = readUsers();
   const index = users.findIndex((u) => u.userId === userId);
@@ -408,39 +497,21 @@ export function updateUserProfile(userId, { name, avatar }) {
   return safeUser;
 }
 
-const TRANSACTIONS_FILE = path.join(DATA_DIR, 'transactions.json');
-let memoryTransactionsCache = null;
-
-function readTransactions() {
-  ensureDb();
-  try {
-    if (fs.existsSync(TRANSACTIONS_FILE)) {
-      const raw = fs.readFileSync(TRANSACTIONS_FILE, 'utf-8');
-      const parsed = JSON.parse(raw) || [];
-      memoryTransactionsCache = parsed;
-      return parsed;
-    }
-  } catch (err) {
-    console.warn('Transactions read warning:', err?.message);
-  }
-  return memoryTransactionsCache || [];
-}
-
-function writeTransactions(txs) {
-  memoryTransactionsCache = txs;
-  ensureDb();
-  try {
-    fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify(txs, null, 2), 'utf-8');
-  } catch (err) {
-    console.warn('Transactions write warning:', err?.message);
-  }
-}
-
 /**
- * Records a new payment / VIP transaction
+ * Records a new payment / VIP transaction with duplicate UTR checking
  */
 export function recordPaymentTransaction({ orderId, txnRef, plan, amount, method, userId, userEmail, key, status = 'SUCCESS' }) {
   const txs = readTransactions();
+
+  // Strict duplicate UTR check
+  if (txnRef) {
+    const cleanRef = String(txnRef).trim();
+    const existing = txs.find((t) => t.txnRef === cleanRef);
+    if (existing) {
+      throw new Error(`Duplicate Transaction: This UPI Reference (UTR ${cleanRef}) has already been submitted on ${new Date(existing.timestamp).toLocaleString()}.`);
+    }
+  }
+
   const newTxn = {
     id: `TXN-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
     orderId: orderId || `ORD-${Date.now()}`,
@@ -457,17 +528,74 @@ export function recordPaymentTransaction({ orderId, txnRef, plan, amount, method
   };
 
   txs.unshift(newTxn);
-  writeTransactions(txs.slice(0, 200)); // keep last 200 transactions
+  writeTransactions(txs.slice(0, 500));
   return newTxn;
 }
 
-/**
- * Fetches transactions for a user
- */
 export function getPaymentTransactions(userId) {
   const txs = readTransactions();
   if (!userId) return txs;
   return txs.filter((t) => t.userId === userId || t.userEmail === userId);
 }
 
+/**
+ * Strict License Key Verification & Redemption
+ */
+export function verifyAndRedeemKey(rawKey, userId = null) {
+  if (!rawKey || typeof rawKey !== 'string') {
+    throw new Error('Please enter a valid VIP license key.');
+  }
 
+  const cleanKey = rawKey.trim().toUpperCase();
+  const keys = readVipKeys();
+
+  const foundKey = keys.find((k) => k.key.toUpperCase() === cleanKey);
+  if (!foundKey) {
+    throw new Error('Invalid VIP License Key. Key not found in official registry.');
+  }
+
+  if (foundKey.isRedeemed && foundKey.redeemedBy && foundKey.redeemedBy !== userId) {
+    throw new Error(`This VIP License Key was already redeemed by user ${foundKey.redeemedBy}. Single-user license.`);
+  }
+
+  // Mark redeemed
+  foundKey.isRedeemed = true;
+  foundKey.redeemedBy = userId || 'USER';
+  foundKey.redeemedAt = Date.now();
+  writeVipKeys(keys);
+
+  if (userId) {
+    updateUserVip(userId, cleanKey, foundKey.durationDays || 30);
+  }
+
+  return {
+    key: cleanKey,
+    plan: foundKey.plan || 'PRO',
+    durationDays: foundKey.durationDays || 30,
+  };
+}
+
+/**
+ * Issue and register a new legitimate VIP license key in the official store
+ */
+export function issueVipKey({ plan, durationDays, orderId, userId }) {
+  const keys = readVipKeys();
+  const randomCode = crypto.randomBytes(3).toString('hex').toUpperCase();
+  const newKey = `TG-VIP-${plan.toUpperCase()}-${randomCode}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  const keyRecord = {
+    key: newKey,
+    plan,
+    durationDays,
+    orderId,
+    isRedeemed: true,
+    redeemedBy: userId || 'PURCHASER',
+    createdAt: Date.now(),
+    redeemedAt: Date.now(),
+  };
+
+  keys.unshift(keyRecord);
+  writeVipKeys(keys);
+
+  return newKey;
+}
