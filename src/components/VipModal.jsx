@@ -42,7 +42,8 @@ export default function VipModal() {
   const [activeReceipt, setActiveReceipt] = useState(null);
 
   // Merchant details
-  const merchantUpi = 'tunegrab@upi';
+  const merchantUpi = process.env.NEXT_PUBLIC_UPI_ID || 'amarmax.me@okhdfcbank';
+  const merchantName = 'Amar Max';
 
   if (!isModalOpen) return null;
 
@@ -79,7 +80,7 @@ export default function VipModal() {
     },
   ];
 
-  const upiPayUri = `upi://pay?pa=${encodeURIComponent(merchantUpi)}&pn=TuneGrab%20Music&am=${selectedPlan.price}&cu=INR&tn=TuneGrab%20VIP%20${encodeURIComponent(selectedPlan.name)}`;
+  const upiPayUri = `upi://pay?pa=${encodeURIComponent(merchantUpi)}&pn=${encodeURIComponent(merchantName)}&am=${selectedPlan.price}&cu=INR&tn=TuneGrab%20VIP%20${encodeURIComponent(selectedPlan.name)}`;
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText(merchantUpi);
@@ -441,27 +442,34 @@ export default function VipModal() {
                       <span className="text-[10px] text-emerald-400 font-bold">● Live Instant UPI Gateway</span>
                     </div>
 
-                    {/* Dynamic High-Contrast Clean SVG QR */}
-                    <div className="inline-block p-3.5 bg-white rounded-2xl shadow-xl">
-                      <div className="w-40 h-40 bg-zinc-900 rounded-xl flex flex-col items-center justify-center p-2 text-center text-white relative overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-br from-amber-400/10 to-transparent pointer-events-none" />
-                        <QrCode className="w-20 h-20 text-white mb-1" />
-                        <span className="text-[11px] font-black text-amber-400">SCAN TO PAY {selectedPlan.priceStr}</span>
-                        <span className="text-[9px] text-zinc-300 font-mono">Any UPI App</span>
+                    {/* Official Google Pay UPI QR Code */}
+                    <div className="inline-block p-2.5 bg-white rounded-3xl shadow-2xl border-2 border-amber-400/40">
+                      <div className="w-48 sm:w-56 overflow-hidden rounded-2xl bg-white flex flex-col items-center">
+                        <img 
+                          src="/upi_qr.jpg" 
+                          alt="Amar Max Google Pay UPI QR Code" 
+                          className="w-full h-auto object-contain rounded-xl"
+                        />
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-center gap-2 pt-1">
-                      <span className="text-xs font-mono text-zinc-300 font-bold bg-[#1a1b22] px-3 py-1.5 rounded-xl border border-white/5">
-                        UPI ID: {merchantUpi}
+                    <div className="space-y-1">
+                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-bold">
+                        <span>● Verified Payee: <strong>Amar Max</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+                      <span className="text-xs font-mono text-zinc-200 font-bold bg-[#1a1b22] px-3.5 py-2 rounded-xl border border-white/10 select-all">
+                        {merchantUpi}
                       </span>
                       <button
                         type="button"
                         onClick={handleCopyUpi}
-                        className="px-3 py-1.5 bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs rounded-xl shadow transition cursor-pointer flex items-center gap-1"
+                        className="px-3.5 py-2 bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs rounded-xl shadow transition cursor-pointer flex items-center gap-1.5 active:scale-95"
                       >
                         <Copy className="w-3.5 h-3.5" />
-                        <span>{copiedUpi ? 'Copied!' : 'Copy'}</span>
+                        <span>{copiedUpi ? 'Copied!' : 'Copy UPI ID'}</span>
                       </button>
                     </div>
 

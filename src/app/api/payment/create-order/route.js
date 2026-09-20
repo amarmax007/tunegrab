@@ -13,11 +13,11 @@ export async function POST(request) {
 
     const planDetails = PLAN_PRICING[plan.toLowerCase()] || PLAN_PRICING.lifetime;
     const orderId = `TG-ORD-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const upiId = process.env.NEXT_PUBLIC_UPI_ID || process.env.UPI_ID || 'tunegrab@upi';
+    const upiId = process.env.NEXT_PUBLIC_UPI_ID || process.env.UPI_ID || 'amarmax.me@okhdfcbank';
     const amount = planDetails.price;
 
     // Standard NPCI UPI URI string
-    const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=TuneGrab%20Music&am=${amount}&cu=INR&tn=TuneGrab%20${encodeURIComponent(planDetails.name)}%20${orderId}`;
+    const upiUri = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=Amar%20Max&am=${amount}&cu=INR&tn=TuneGrab%20${encodeURIComponent(planDetails.name)}%20${orderId}`;
 
     return NextResponse.json({
       success: true,
