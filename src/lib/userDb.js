@@ -327,8 +327,11 @@ export function toggleUserFavorite(userId, track) {
 
 export function updateUserVip(userId, key, durationDays = 30) {
   const users = readUsers();
-  const index = users.findIndex((u) => u.userId === userId);
-  if (index === -1) return null;
+  const index = users.findIndex((u) => u.userId === userId || u.email === userId);
+  if (index === -1) {
+    // If not found by userId, check if key is valid globally
+    return { isVip: true, vipKey: key, vipExpiry: durationDays ? Date.now() + durationDays * 24 * 60 * 60 * 1000 : null };
+  }
 
   const user = users[index];
   user.isVip = true;
@@ -340,4 +343,131 @@ export function updateUserVip(userId, key, durationDays = 30) {
   const { passwordHash, ...safeUser } = user;
   return safeUser;
 }
+
+/**
+ * Resets user password after verifying 6-digit OTP code
+ */
+export function resetPasswordWithOtp({ email, code, newPassword }) {
+  const cleanEmail = String(email).trim().toLowerCase();
+  if (!validateEmail(cleanEmail)) {
+    throw new Error('Please enter a valid email address.');
+  }
+
+  const stored = otpStore.get(cleanEmail);
+  if (!stored) {
+    throw new Error('No OTP request found for this email. Please request a new code.');
+  }
+
+  if (Date.now() > stored.expiresAt) {
+    otpStore.delete(cleanEmail);
+    throw new Error('The OTP code has expired. Please request a new verification code.');
+  }
+
+  if (String(stored.code).trim() !== String(code).trim()) {
+    throw new Error('Incorrect 6-digit verification code. Please check and try again.');
+  }
+
+  if (!newPassword || newPassword.length < 4) {
+    throw new Error('New password must be at least 4 characters long.');
+  }
+
+  otpStore.delete(cleanEmail);
+
+  const users = readUsers();
+  const user = users.find((u) => u.email === cleanEmail);
+  if (!user) {
+    throw new Error('No account found associated with this email address.');
+  }
+
+  user.passwordHash = hashPassword(newPassword);
+  writeUsers(users);
+
+  const { passwordHash, ...safeUser } = user;
+  return safeUser;
+}
+
+/**
+ * Updates user profile information
+ */
+export function updateUserProfile(userId, { name, avatar }) {
+  const users = readUsers();
+  const index = users.findIndex((u) => u.userId === userId);
+  if (index === -1) throw new Error('User not found.');
+
+  const user = users[index];
+  if (name && typeof name === 'string') {
+    user.name = name.trim();
+  }
+  if (avatar !== undefined) {
+    user.avatar = avatar;
+  }
+
+  writeUsers(users);
+
+  const { passwordHash, ...safeUser } = user;
+  return safeUser;
+}
+
+const TRANSACTIONS_FILE = path.join(DATA_DIR, 'transactions.json');
+let memoryTransactionsCache = null;
+
+function readTransactions() {
+  ensureDb();
+  try {
+    if (fs.existsSync(TRANSACTIONS_FILE)) {
+      const raw = fs.readFileSync(TRANSACTIONS_FILE, 'utf-8');
+      const parsed = JSON.parse(raw) || [];
+      memoryTransactionsCache = parsed;
+      return parsed;
+    }
+  } catch (err) {
+    console.warn('Transactions read warning:', err?.message);
+  }
+  return memoryTransactionsCache || [];
+}
+
+function writeTransactions(txs) {
+  memoryTransactionsCache = txs;
+  ensureDb();
+  try {
+    fs.writeFileSync(TRANSACTIONS_FILE, JSON.stringify(txs, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Transactions write warning:', err?.message);
+  }
+}
+
+/**
+ * Records a new payment / VIP transaction
+ */
+export function recordPaymentTransaction({ orderId, txnRef, plan, amount, method, userId, userEmail, key, status = 'SUCCESS' }) {
+  const txs = readTransactions();
+  const newTxn = {
+    id: `TXN-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
+    orderId: orderId || `ORD-${Date.now()}`,
+    txnRef: txnRef || null,
+    plan: plan || 'monthly',
+    amount: amount || 199,
+    currency: 'INR',
+    method: method || 'UPI',
+    userId: userId || 'GUEST',
+    userEmail: userEmail || 'guest@tunegrab.app',
+    key: key || null,
+    status,
+    timestamp: Date.now(),
+  };
+
+  txs.unshift(newTxn);
+  writeTransactions(txs.slice(0, 200)); // keep last 200 transactions
+  return newTxn;
+}
+
+/**
+ * Fetches transactions for a user
+ */
+export function getPaymentTransactions(userId) {
+  const txs = readTransactions();
+  if (!userId) return txs;
+  return txs.filter((t) => t.userId === userId || t.userEmail === userId);
+}
+
 

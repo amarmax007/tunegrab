@@ -133,6 +133,48 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  const resetPassword = async ({ email, code, newPassword }) => {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code, newPassword }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Password reset failed.');
+    }
+
+    setUser(data.user);
+    try {
+      localStorage.setItem('tunegrab_active_user_id', data.user.userId);
+    } catch (e) {}
+
+    return data.user;
+  };
+
+  const updateProfile = async ({ name, avatar }) => {
+    if (!user) return;
+    const res = await fetch('/api/auth/update-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.userId, name, avatar }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Profile update failed.');
+    }
+
+    setUser(data.user);
+    return data.user;
+  };
+
+  const syncUserWithVip = (vipKey, expiry) => {
+    if (!user) return;
+    setUser((prev) => prev ? { ...prev, isVip: true, vipKey, vipExpiry: expiry } : prev);
+  };
+
   const logout = () => {
     setUser(null);
     deactivateVip();
@@ -203,6 +245,9 @@ export function AuthProvider({ children }) {
         register,
         sendOtp,
         verifyOtp,
+        resetPassword,
+        updateProfile,
+        syncUserWithVip,
         loginWithGoogle,
         logout,
         recordDownload,

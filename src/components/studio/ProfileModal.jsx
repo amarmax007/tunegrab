@@ -17,20 +17,28 @@ import {
   Copy,
   CheckCircle2,
   LogIn,
-  UserPlus
+  UserPlus,
+  Settings,
+  Edit3,
+  Check,
+  ShieldCheck
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useVip } from '@/context/VipContext';
 import { usePlayer } from '@/context/PlayerContext';
 
 export default function ProfileModal({ isOpen, onClose }) {
-  const { user, isAuthenticated, logout, openAuthModal } = useAuth();
-  const { isVip, vipKey, openVipModal } = useVip();
+  const { user, isAuthenticated, logout, openAuthModal, updateProfile } = useAuth();
+  const { isVip, vipKey, vipExpiry, openVipModal } = useVip();
   const { playTrack } = usePlayer();
 
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'history' | 'favorites'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'history' | 'favorites' | 'settings'
   const [copiedKey, setCopiedKey] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
+  
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState(user?.name || '');
+  const [savingProfile, setSavingProfile] = useState(false);
 
   if (!isOpen) return null;
 
@@ -42,6 +50,19 @@ export default function ProfileModal({ isOpen, onClose }) {
     } else {
       setCopiedKey(true);
       setTimeout(() => setCopiedKey(false), 2000);
+    }
+  };
+
+  const handleSaveName = async () => {
+    if (!editNameValue.trim()) return;
+    setSavingProfile(true);
+    try {
+      await updateProfile({ name: editNameValue.trim() });
+      setIsEditingName(false);
+    } catch (e) {
+      console.warn('Failed to update name:', e);
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -96,12 +117,8 @@ export default function ProfileModal({ isOpen, onClose }) {
         <div className="relative p-6 bg-gradient-to-r from-[#be5c2b] via-[#8f3e17] to-[#252630] border-b border-white/5 flex items-start justify-between">
           <div className="flex items-center gap-4">
             <div className="relative">
-              <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-white shadow-xl bg-black/40">
-                <img
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80"
-                  alt="User Profile"
-                  className="w-full h-full object-cover"
-                />
+              <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-white shadow-xl bg-[#24252f] flex items-center justify-center font-black text-2xl text-white">
+                {user?.name ? user.name.slice(0, 2).toUpperCase() : 'TG'}
               </div>
               {isVip && (
                 <div className="absolute -bottom-1.5 -right-1.5 p-1 rounded-full bg-amber-400 text-black shadow-md">
@@ -112,9 +129,47 @@ export default function ProfileModal({ isOpen, onClose }) {
 
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white">
-                  {isAuthenticated ? user.name : 'Guest User'}
-                </h3>
+                {isEditingName ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={editNameValue}
+                      onChange={(e) => setEditNameValue(e.target.value)}
+                      className="bg-black/60 text-white text-sm px-2 py-0.5 rounded-lg border border-white/20 outline-none font-bold"
+                    />
+                    <button
+                      onClick={handleSaveName}
+                      disabled={savingProfile}
+                      className="p-1 rounded-md bg-[#f0fc54] text-black hover:opacity-90"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setIsEditingName(false)}
+                      className="p-1 rounded-md bg-zinc-800 text-white hover:bg-zinc-700"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      {isAuthenticated ? user.name : 'Guest User'}
+                    </h3>
+                    {isAuthenticated && (
+                      <button
+                        onClick={() => {
+                          setEditNameValue(user.name);
+                          setIsEditingName(true);
+                        }}
+                        className="text-zinc-400 hover:text-white"
+                        title="Edit display name"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </>
+                )}
                 <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${
                   isVip 
                     ? 'bg-amber-400 text-black shadow-sm' 
@@ -132,7 +187,7 @@ export default function ProfileModal({ isOpen, onClose }) {
                     </span>
                     <button
                       onClick={() => handleCopy(user.userId, 'id')}
-                      className="text-[10px] text-zinc-300 hover:text-white underline"
+                      className="text-[10px] text-zinc-300 hover:text-white underline cursor-pointer"
                     >
                       {copiedId ? 'Copied!' : 'Copy ID'}
                     </button>
@@ -143,7 +198,7 @@ export default function ProfileModal({ isOpen, onClose }) {
                 </>
               ) : (
                 <p className="text-xs text-zinc-300 mt-1">
-                  Sign in or create a free account to sync your library across any computer!
+                  Sign in or create a free account to sync your library across all devices!
                 </p>
               )}
             </div>
@@ -151,7 +206,7 @@ export default function ProfileModal({ isOpen, onClose }) {
 
           <button
             onClick={onClose}
-            className="p-2 text-zinc-300 hover:text-white rounded-full hover:bg-black/30 transition"
+            className="p-2 text-zinc-300 hover:text-white rounded-full hover:bg-black/30 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -173,7 +228,7 @@ export default function ProfileModal({ isOpen, onClose }) {
                   onClose();
                   openAuthModal('login');
                 }}
-                className="flex-1 py-3 px-4 rounded-2xl bg-[#282935] hover:bg-white/10 text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10 transition"
+                className="flex-1 py-3 px-4 rounded-2xl bg-[#282935] hover:bg-white/10 text-white font-bold text-xs flex items-center justify-center gap-2 border border-white/10 transition cursor-pointer"
               >
                 <LogIn className="w-4 h-4" />
                 Sign In
@@ -183,7 +238,7 @@ export default function ProfileModal({ isOpen, onClose }) {
                   onClose();
                   openAuthModal('register');
                 }}
-                className="flex-1 py-3 px-4 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs flex items-center justify-center gap-2 transition shadow-lg"
+                className="flex-1 py-3 px-4 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs flex items-center justify-center gap-2 transition shadow-lg cursor-pointer"
               >
                 <UserPlus className="w-4 h-4" />
                 Register Free
@@ -197,7 +252,7 @@ export default function ProfileModal({ isOpen, onClose }) {
             <div className="flex border-b border-white/5 bg-[#16171d] p-1.5 gap-1.5">
               <button
                 onClick={() => setActiveTab('overview')}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeTab === 'overview'
                     ? 'bg-[#f0fc54] text-black shadow-md'
                     : 'text-zinc-400 hover:text-white hover:bg-white/5'
@@ -208,7 +263,7 @@ export default function ProfileModal({ isOpen, onClose }) {
               </button>
               <button
                 onClick={() => setActiveTab('history')}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeTab === 'history'
                     ? 'bg-[#f0fc54] text-black shadow-md'
                     : 'text-zinc-400 hover:text-white hover:bg-white/5'
@@ -219,7 +274,7 @@ export default function ProfileModal({ isOpen, onClose }) {
               </button>
               <button
                 onClick={() => setActiveTab('favorites')}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeTab === 'favorites'
                     ? 'bg-[#f0fc54] text-black shadow-md'
                     : 'text-zinc-400 hover:text-white hover:bg-white/5'
@@ -239,18 +294,18 @@ export default function ProfileModal({ isOpen, onClose }) {
                   <div className="grid grid-cols-3 gap-3">
                     <div className="p-3.5 rounded-2xl bg-[#24252f] border border-white/5 text-center">
                       <Download className="w-4 h-4 text-[#f0fc54] mx-auto mb-1" />
-                      <p className="text-base font-black text-white">{downloads.length || 12}</p>
+                      <p className="text-base font-black text-white">{downloads.length || 0}</p>
                       <p className="text-[10px] text-zinc-400 uppercase font-medium">Tracks Saved</p>
                     </div>
                     <div className="p-3.5 rounded-2xl bg-[#24252f] border border-white/5 text-center">
                       <Heart className="w-4 h-4 text-[#f0fc54] mx-auto mb-1" />
-                      <p className="text-base font-black text-white">{favorites.length || 4}</p>
+                      <p className="text-base font-black text-white">{favorites.length || 0}</p>
                       <p className="text-[10px] text-zinc-400 uppercase font-medium">Favorites</p>
                     </div>
                     <div className="p-3.5 rounded-2xl bg-[#24252f] border border-white/5 text-center">
                       <Sparkles className="w-4 h-4 text-[#f0fc54] mx-auto mb-1" />
-                      <p className="text-base font-black text-white">320k</p>
-                      <p className="text-[10px] text-zinc-400 uppercase font-medium">Audio Bitrate</p>
+                      <p className="text-base font-black text-white">{isVip ? '320k + FLAC' : '320k'}</p>
+                      <p className="text-[10px] text-zinc-400 uppercase font-medium">Audio Quality</p>
                     </div>
                   </div>
 
@@ -264,7 +319,7 @@ export default function ProfileModal({ isOpen, onClose }) {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                         isVip ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'
                       }`}>
-                        {isVip ? 'ACTIVE VIP' : 'FREE PLAN'}
+                        {isVip ? 'ACTIVE VIP TURBO' : 'FREE PLAN'}
                       </span>
                     </div>
 
@@ -272,12 +327,13 @@ export default function ProfileModal({ isOpen, onClose }) {
                       <div className="space-y-2">
                         <p className="text-[11px] text-zinc-400">
                           Your active license key is tied to your account across all systems.
+                          {vipExpiry && ` (Valid until ${new Date(vipExpiry).toLocaleDateString()})`}
                         </p>
                         <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#1a1b22] border border-white/5">
                           <span className="font-mono text-amber-300 text-xs font-semibold">{vipKey || 'VIP-ACTIVE'}</span>
                           <button
                             onClick={() => handleCopy(vipKey || 'VIP-ACTIVE', 'key')}
-                            className="text-[11px] font-semibold text-[#f0fc54] hover:underline"
+                            className="text-[11px] font-semibold text-[#f0fc54] hover:underline cursor-pointer"
                           >
                             {copiedKey ? 'Copied!' : 'Copy Key'}
                           </button>
@@ -293,7 +349,7 @@ export default function ProfileModal({ isOpen, onClose }) {
                             onClose();
                             openVipModal();
                           }}
-                          className="px-3 py-1.5 rounded-xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-[11px] transition shadow"
+                          className="px-3 py-1.5 rounded-xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-[11px] transition shadow cursor-pointer"
                         >
                           Upgrade (₹99)
                         </button>
@@ -330,7 +386,7 @@ export default function ProfileModal({ isOpen, onClose }) {
                         <button
                           onClick={() => handleReDownload(track)}
                           title="Re-download MP3"
-                          className="p-2 rounded-xl bg-[#1a1b22] hover:bg-[#f0fc54] hover:text-black text-zinc-300 transition shrink-0"
+                          className="p-2 rounded-xl bg-[#1a1b22] hover:bg-[#f0fc54] hover:text-black text-zinc-300 transition shrink-0 cursor-pointer"
                         >
                           <Download className="w-3.5 h-3.5" />
                         </button>
@@ -368,14 +424,14 @@ export default function ProfileModal({ isOpen, onClose }) {
                           <button
                             onClick={() => playTrack(track)}
                             title="Play Song"
-                            className="p-2 rounded-xl bg-[#1a1b22] hover:bg-[#f0fc54] hover:text-black text-zinc-300 transition"
+                            className="p-2 rounded-xl bg-[#1a1b22] hover:bg-[#f0fc54] hover:text-black text-zinc-300 transition cursor-pointer"
                           >
                             <Play className="w-3.5 h-3.5 fill-current" />
                           </button>
                           <button
                             onClick={() => handleReDownload(track)}
                             title="Download MP3"
-                            className="p-2 rounded-xl bg-[#1a1b22] hover:bg-[#f0fc54] hover:text-black text-zinc-300 transition"
+                            className="p-2 rounded-xl bg-[#1a1b22] hover:bg-[#f0fc54] hover:text-black text-zinc-300 transition cursor-pointer"
                           >
                             <Download className="w-3.5 h-3.5" />
                           </button>
@@ -394,12 +450,12 @@ export default function ProfileModal({ isOpen, onClose }) {
                   logout();
                   onClose();
                 }}
-                className="text-red-400 hover:text-red-300 flex items-center gap-1.5 font-semibold"
+                className="text-red-400 hover:text-red-300 flex items-center gap-1.5 font-semibold cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 Log Out from this Device
               </button>
-              <button onClick={onClose} className="text-zinc-400 hover:text-white">
+              <button onClick={onClose} className="text-zinc-400 hover:text-white cursor-pointer">
                 Close
               </button>
             </div>

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { updateUserVip } from '@/lib/userDb';
 
 // Preset VIP master keys and dynamic pattern validator
 const VALID_PROMO_KEYS = new Set([
@@ -12,7 +13,7 @@ const VALID_PROMO_KEYS = new Set([
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { key, action } = body;
+    const { key, action, userId } = body;
 
     // Simulated Checkout payment key generator
     if (action === 'generate_key') {
@@ -20,6 +21,10 @@ export async function POST(request) {
       const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase();
       const generatedKey = `VIP-${plan.toUpperCase()}-${randomPart}-${Date.now().toString(36).toUpperCase()}`;
       const durationDays = plan === 'weekly' ? 7 : plan === 'yearly' ? 365 : plan === 'lifetime' ? 3650 : 30;
+
+      if (userId) {
+        updateUserVip(userId, generatedKey, durationDays);
+      }
 
       return NextResponse.json({
         success: true,
@@ -37,6 +42,9 @@ export async function POST(request) {
 
     // Check preset keys
     if (VALID_PROMO_KEYS.has(cleanKey)) {
+      if (userId) {
+        updateUserVip(userId, cleanKey, 365);
+      }
       return NextResponse.json({
         success: true,
         key: cleanKey,
@@ -50,10 +58,14 @@ export async function POST(request) {
     if (cleanKey.startsWith('VIP-')) {
       const parts = cleanKey.split('-');
       if (parts.length >= 3) {
+        const days = parts[1] === 'WEEKLY' ? 7 : parts[1] === 'LIFETIME' ? 3650 : 30;
+        if (userId) {
+          updateUserVip(userId, cleanKey, days);
+        }
         return NextResponse.json({
           success: true,
           key: cleanKey,
-          durationDays: parts[1] === 'WEEKLY' ? 7 : parts[1] === 'LIFETIME' ? 3650 : 30,
+          durationDays: days,
           plan: parts[1] || 'PRO',
           message: 'VIP License Verified Successfully!',
         });

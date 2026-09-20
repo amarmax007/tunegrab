@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   User, 
@@ -12,42 +12,116 @@ import {
   ShieldCheck, 
   Key, 
   ArrowRight,
-  Copy,
+  UserPlus,
+  LogIn,
   Smartphone,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  HelpCircle
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function AuthModal() {
-  const { isAuthModalOpen, closeAuthModal, authMode, login, register, sendOtp, verifyOtp, loginWithGoogle } = useAuth();
+  const { 
+    isAuthModalOpen, 
+    closeAuthModal, 
+    authMode, 
+    login, 
+    register, 
+    sendOtp, 
+    verifyOtp, 
+    resetPassword,
+    loginWithGoogle 
+  } = useAuth();
   
-  // Tabs: 'otp' | 'password' | 'register'
-  const [tab, setTab] = useState('otp');
+  // Tabs: 'register' | 'otp' | 'password' | 'forgot'
+  const [tab, setTab] = useState(authMode === 'register' ? 'register' : 'otp');
   
+  // Register Form
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+
   // OTP Flow
   const [emailForOtp, setEmailForOtp] = useState('');
   const [nameForOtp, setNameForOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [incomingCodeBanner, setIncomingCodeBanner] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
 
   // Password / User ID Login
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Register Form
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
+  // Forgot Password Flow
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOtpSent, setForgotOtpSent] = useState(false);
+  const [forgotCode, setForgotCode] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successData, setSuccessData] = useState(null);
 
+  // Sync tab with initial authMode when modal opens
+  useEffect(() => {
+    if (isAuthModalOpen) {
+      setTab(authMode === 'register' ? 'register' : 'otp');
+      setError('');
+      setSuccessData(null);
+    }
+  }, [isAuthModalOpen, authMode]);
+
+  // Resend Timer effect
+  useEffect(() => {
+    let interval = null;
+    if (resendTimer > 0) {
+      interval = setInterval(() => {
+        setResendTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
   if (!isAuthModalOpen) return null;
 
   // --- Handlers ---
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (regPassword !== regConfirmPassword) {
+      setError('Passwords do not match. Please verify.');
+      return;
+    }
+
+    if (regPassword.length < 4) {
+      setError('Password must be at least 4 characters long.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const user = await register({
+        name: regName,
+        email: regEmail,
+        password: regPassword,
+      });
+      setSuccessData(user);
+      setTimeout(() => {
+        closeAuthModal();
+      }, 2200);
+    } catch (err) {
+      setError(err.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setError('');
@@ -56,6 +130,7 @@ export default function AuthModal() {
     try {
       const res = await sendOtp(emailForOtp);
       setOtpSent(true);
+      setResendTimer(60);
       if (res.code) {
         setIncomingCodeBanner(res.code);
       }
@@ -80,7 +155,7 @@ export default function AuthModal() {
       setSuccessData(user);
       setTimeout(() => {
         closeAuthModal();
-      }, 2500);
+      }, 2200);
     } catch (err) {
       setError(err.message || 'Verification failed.');
     } finally {
@@ -106,23 +181,64 @@ export default function AuthModal() {
     }
   };
 
+  const handleForgotSendOtp = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await sendOtp(forgotEmail);
+      setForgotOtpSent(true);
+      setResendTimer(60);
+      if (res.code) {
+        setIncomingCodeBanner(res.code);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to send recovery code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotReset = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const user = await resetPassword({
+        email: forgotEmail,
+        code: forgotCode,
+        newPassword: forgotNewPassword,
+      });
+      setSuccessData(user);
+      setTimeout(() => {
+        closeAuthModal();
+      }, 2200);
+    } catch (err) {
+      setError(err.message || 'Password reset failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setError('');
     setLoading(true);
     try {
-      if (!emailForOtp || !emailForOtp.includes('@')) {
-        throw new Error('Please enter your email address first, then click Google Sign-In.');
+      const targetEmail = regEmail || emailForOtp || loginIdentifier;
+      if (!targetEmail || !targetEmail.includes('@')) {
+        throw new Error('Please enter your email in the field below to continue with Google.');
       }
-      // Authenticate with user-provided email (no fake avatar)
       const googleUser = await loginWithGoogle({
-        email: emailForOtp,
-        name: nameForOtp || emailForOtp.split('@')[0],
+        email: targetEmail,
+        name: regName || nameForOtp || targetEmail.split('@')[0],
         avatar: '',
       });
       setSuccessData(googleUser);
       setTimeout(() => {
         closeAuthModal();
-      }, 2000);
+      }, 1800);
     } catch (err) {
       setError(err.message || 'Google Sign-in failed.');
     } finally {
@@ -132,18 +248,19 @@ export default function AuthModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-[#1a1b22] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-md bg-[#1a1b22] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        
         {/* Header */}
-        <div className="p-6 bg-gradient-to-r from-[#be5c2b]/40 via-[#252630] to-[#1a1b22] border-b border-white/5 flex items-center justify-between">
+        <div className="p-5 sm:p-6 bg-gradient-to-r from-[#be5c2b]/40 via-[#252630] to-[#1a1b22] border-b border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-[#f0fc54] text-black flex items-center justify-center font-black shadow-lg shadow-[#f0fc54]/20">
               <ShieldCheck className="w-5 h-5 text-black" />
             </div>
             <div>
               <h3 className="text-base font-bold text-white">
-                TuneGrab Secure Account
+                TuneGrab Account Hub
               </h3>
-              <p className="text-[11px] text-zinc-400">Sync library & VIP access on any device</p>
+              <p className="text-[11px] text-zinc-400">Sync library, history & VIP across devices</p>
             </div>
           </div>
           <button
@@ -155,40 +272,54 @@ export default function AuthModal() {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-white/5 bg-[#16171d] p-1.5 gap-1.5">
+        <div className="flex border-b border-white/5 bg-[#16171d] p-1.5 gap-1">
+          <button
+            onClick={() => {
+              setTab('register');
+              setError('');
+            }}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+              tab === 'register'
+                ? 'bg-[#f0fc54] text-black shadow-md'
+                : 'text-zinc-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Sign Up</span>
+          </button>
           <button
             onClick={() => {
               setTab('otp');
               setError('');
               setOtpSent(false);
             }}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
               tab === 'otp'
                 ? 'bg-[#f0fc54] text-black shadow-md'
                 : 'text-zinc-400 hover:text-white hover:bg-white/5'
             }`}
           >
             <Smartphone className="w-3.5 h-3.5" />
-            Email OTP (Instant)
+            <span>Email OTP</span>
           </button>
           <button
             onClick={() => {
               setTab('password');
               setError('');
             }}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
               tab === 'password'
                 ? 'bg-[#f0fc54] text-black shadow-md'
                 : 'text-zinc-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Key className="w-3.5 h-3.5" />
-            User ID / Password
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Sign In</span>
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 overflow-y-auto">
           {/* Error Message */}
           {error && (
             <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold flex items-center gap-2">
@@ -203,7 +334,7 @@ export default function AuthModal() {
               <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto animate-bounce" />
               <div>
                 <p className="font-extrabold text-base text-white">Authentication Verified!</p>
-                <p className="text-[11px] text-zinc-300 mt-0.5">Welcome back, <strong>{successData.name}</strong></p>
+                <p className="text-[11px] text-zinc-300 mt-0.5">Welcome, <strong>{successData.name}</strong></p>
               </div>
               <div className="p-2.5 rounded-xl bg-black/60 border border-emerald-500/30 font-mono text-xs text-[#f0fc54]">
                 Permanent User ID: <strong>{successData.userId}</strong>
@@ -214,10 +345,107 @@ export default function AuthModal() {
             </div>
           )}
 
-          {/* TAB 1: 6-DIGIT EMAIL OTP VERIFICATION */}
+          {/* TAB 1: SIGN UP (NEW ACCOUNT) */}
+          {tab === 'register' && !successData && (
+            <form onSubmit={handleRegister} className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-zinc-300">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="e.g. Amar Max"
+                    className="w-full bg-[#24252f] text-white text-xs pl-10 pr-4 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-zinc-300">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    required
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="yourname@gmail.com"
+                    className="w-full bg-[#24252f] text-white text-xs pl-10 pr-4 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="password"
+                      required
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-[#24252f] text-white text-xs pl-8 pr-3 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    Confirm Pass
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="password"
+                      required
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-[#24252f] text-white text-xs pl-8 pr-3 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                <span>Create Free Studio Account</span>
+              </button>
+
+              <div className="text-center pt-1">
+                <p className="text-[11px] text-zinc-400">
+                  Already have an account?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setTab('password')}
+                    className="text-[#f0fc54] hover:underline font-bold"
+                  >
+                    Sign In here
+                  </button>
+                </p>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 2: 6-DIGIT EMAIL OTP VERIFICATION */}
           {tab === 'otp' && !successData && (
             <div className="space-y-4">
-              {/* Google 1-Click Fast Auth */}
+              {/* Google Fast Auth */}
               <button
                 type="button"
                 onClick={handleGoogleLogin}
@@ -335,17 +563,31 @@ export default function AuthModal() {
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                     <span>Verify Code & Log In</span>
                   </button>
+
+                  <div className="text-center pt-1">
+                    {resendTimer > 0 ? (
+                      <span className="text-[11px] text-zinc-500">Resend code in {resendTimer}s</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        className="text-[11px] text-[#f0fc54] hover:underline font-bold inline-flex items-center gap-1"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Resend Code
+                      </button>
+                    )}
+                  </div>
                 </form>
               )}
             </div>
           )}
 
-          {/* TAB 2: USER ID / PASSWORD LOGIN */}
+          {/* TAB 3: USER ID / PASSWORD LOGIN */}
           {tab === 'password' && !successData && (
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-zinc-300">
-                  User ID (e.g. TG-8924) or Registered Email
+                  Permanent User ID (e.g. TG-8924) or Registered Email
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -361,9 +603,21 @@ export default function AuthModal() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-zinc-300">
-                  Password
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTab('forgot');
+                      setError('');
+                    }}
+                    className="text-[10px] text-[#f0fc54] hover:underline"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
@@ -385,7 +639,119 @@ export default function AuthModal() {
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                 <span>Sign In with Password</span>
               </button>
+
+              <div className="text-center pt-1">
+                <p className="text-[11px] text-zinc-400">
+                  Don't have an account yet?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setTab('register')}
+                    className="text-[#f0fc54] hover:underline font-bold"
+                  >
+                    Create one now
+                  </button>
+                </p>
+              </div>
             </form>
+          )}
+
+          {/* TAB 4: FORGOT PASSWORD RECOVERY */}
+          {tab === 'forgot' && !successData && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-white">Reset Account Password</h4>
+                <button
+                  type="button"
+                  onClick={() => setTab('password')}
+                  className="text-[10px] text-zinc-400 hover:text-white underline"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+
+              {!forgotOtpSent ? (
+                <form onSubmit={handleForgotSendOtp} className="space-y-3.5">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-zinc-300">
+                      Enter Registered Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        required
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="yourname@gmail.com"
+                        className="w-full bg-[#24252f] text-white text-xs pl-10 pr-4 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                    <span>Send Password Reset OTP</span>
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleForgotReset} className="space-y-3.5">
+                  {incomingCodeBanner && (
+                    <div 
+                      onClick={() => setForgotCode(incomingCodeBanner)}
+                      className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between cursor-pointer hover:bg-amber-500/15 transition"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Key className="w-4 h-4 text-amber-400" />
+                        <span>Code: <strong className="font-mono text-white text-sm">{incomingCodeBanner}</strong></span>
+                      </div>
+                      <span className="text-[10px] underline font-bold text-[#f0fc54]">Auto-Fill</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-zinc-300">
+                      6-Digit Code
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      required
+                      value={forgotCode}
+                      onChange={(e) => setForgotCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="• • • • • •"
+                      className="w-full bg-[#24252f] text-center font-mono text-lg text-[#f0fc54] py-2.5 rounded-2xl border border-white/10 focus:border-[#f0fc54] outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-zinc-300">
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={forgotNewPassword}
+                      onChange={(e) => setForgotNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      className="w-full bg-[#24252f] text-white text-xs px-4 py-2.5 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || forgotCode.length < 6}
+                    className="w-full py-3 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    <span>Update Password & Log In</span>
+                  </button>
+                </form>
+              )}
+            </div>
           )}
 
           <div className="pt-2 text-center text-[10px] text-zinc-500 flex items-center justify-center gap-1.5">
@@ -397,4 +763,3 @@ export default function AuthModal() {
     </div>
   );
 }
-
