@@ -102,6 +102,8 @@ export default function RootLayout({ children }) {
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        {/* Google Search Console Verification */}
+        <meta name="google-site-verification" content="google0706f257745e5716" />
         {/* Monetag Official Verification Meta Tag */}
         <meta name="monetag" content="0da3e3fe1271693335fba5ed48681abd" />
         {/* Monetag MultiTag Official High-CPM Ad Network Script */}
