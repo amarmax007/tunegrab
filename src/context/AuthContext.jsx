@@ -59,16 +59,33 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const register = async ({ name, email, password }) => {
+  // Step 1: Request Registration OTP
+  const requestRegister = async ({ name, email, password }) => {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ action: 'request', name, email, password }),
     });
 
     const data = await res.json();
     if (!res.ok || data.error) {
       throw new Error(data.error || 'Registration failed.');
+    }
+
+    return data;
+  };
+
+  // Step 2: Complete Registration with OTP Code
+  const verifyRegisterOtp = async ({ email, code }) => {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'verify', email, code }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'OTP verification failed.');
     }
 
     setUser(data.user);
@@ -102,7 +119,7 @@ export function AuthProvider({ children }) {
 
     const data = await res.json();
     if (!res.ok || data.error) {
-      throw new Error(data.error || 'Verification failed.');
+      throw new Error(data.error || 'OTP verification failed.');
     }
 
     setUser(data.user);
@@ -110,25 +127,9 @@ export function AuthProvider({ children }) {
       localStorage.setItem('tunegrab_active_user_id', data.user.userId);
     } catch (e) {}
 
-    return data.user;
-  };
-
-  const loginWithGoogle = async ({ email, name, avatar }) => {
-    const res = await fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name, avatar }),
-    });
-
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      throw new Error(data.error || 'Google login failed.');
+    if (data.user.isVip && data.user.vipKey) {
+      activateVip(data.user.vipKey);
     }
-
-    setUser(data.user);
-    try {
-      localStorage.setItem('tunegrab_active_user_id', data.user.userId);
-    } catch (e) {}
 
     return data.user;
   };
@@ -142,7 +143,7 @@ export function AuthProvider({ children }) {
 
     const data = await res.json();
     if (!res.ok || data.error) {
-      throw new Error(data.error || 'Password reset failed.');
+      throw new Error(data.error || 'Failed to reset password.');
     }
 
     setUser(data.user);
@@ -154,7 +155,8 @@ export function AuthProvider({ children }) {
   };
 
   const updateProfile = async ({ name, avatar }) => {
-    if (!user) return;
+    if (!user) throw new Error('You must be signed in to update profile.');
+
     const res = await fetch('/api/auth/update-profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -163,24 +165,11 @@ export function AuthProvider({ children }) {
 
     const data = await res.json();
     if (!res.ok || data.error) {
-      throw new Error(data.error || 'Profile update failed.');
+      throw new Error(data.error || 'Failed to update profile.');
     }
 
     setUser(data.user);
     return data.user;
-  };
-
-  const syncUserWithVip = (vipKey, expiry) => {
-    if (!user) return;
-    setUser((prev) => prev ? { ...prev, isVip: true, vipKey, vipExpiry: expiry } : prev);
-  };
-
-  const logout = () => {
-    setUser(null);
-    deactivateVip();
-    try {
-      localStorage.removeItem('tunegrab_active_user_id');
-    } catch (e) {}
   };
 
   const recordDownload = async (track) => {
@@ -192,17 +181,17 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ userId: user.userId, track }),
       });
       const data = await res.json();
-      if (data?.user) {
+      if (data.user) {
         setUser(data.user);
       }
     } catch (e) {
-      console.warn('Could not record download:', e);
+      console.warn('Could not record download history:', e);
     }
   };
 
   const toggleFavorite = async (track) => {
     if (!user) {
-      setIsAuthModalOpen(true);
+      openAuthModal('login');
       return false;
     }
     try {
@@ -212,19 +201,38 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ userId: user.userId, track }),
       });
       const data = await res.json();
-      if (data?.user) {
+      if (data.user) {
         setUser(data.user);
+        return true;
       }
-      return true;
     } catch (e) {
       console.warn('Could not toggle favorite:', e);
-      return false;
     }
+    return false;
   };
 
-  const isFavorite = (trackId) => {
+  const isFavorite = (trackIdOrTitle) => {
     if (!user || !user.favorites) return false;
-    return user.favorites.some((f) => (f.id && f.id === trackId) || (f.title && f.title === trackId));
+    return user.favorites.some((f) => f.id === trackIdOrTitle || f.title === trackIdOrTitle);
+  };
+
+  const logout = () => {
+    setUser(null);
+    deactivateVip();
+    try {
+      localStorage.removeItem('tunegrab_active_user_id');
+    } catch (e) {}
+  };
+
+  const syncUserWithVip = (vipKey, expiry) => {
+    if (user) {
+      setUser((prev) => ({
+        ...prev,
+        isVip: true,
+        vipKey,
+        vipExpiry: expiry,
+      }));
+    }
   };
 
   const openAuthModal = (mode = 'login') => {
@@ -232,29 +240,30 @@ export function AuthProvider({ children }) {
     setIsAuthModalOpen(true);
   };
 
-  const closeAuthModal = () => setIsAuthModalOpen(false);
+  const closeAuthModal = () => {
+    setIsAuthModalOpen(false);
+  };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!user,
-        authMode,
         isAuthModalOpen,
+        authMode,
+        openAuthModal,
+        closeAuthModal,
         login,
-        register,
+        requestRegister,
+        verifyRegisterOtp,
         sendOtp,
         verifyOtp,
         resetPassword,
         updateProfile,
-        syncUserWithVip,
-        loginWithGoogle,
-        logout,
         recordDownload,
         toggleFavorite,
         isFavorite,
-        openAuthModal,
-        closeAuthModal,
+        logout,
+        syncUserWithVip,
       }}
     >
       {children}
@@ -265,7 +274,7 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }

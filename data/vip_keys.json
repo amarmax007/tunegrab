@@ -1,0 +1,24 @@
+[
+  {
+    "key": "VIP-PRO-2026",
+    "plan": "lifetime",
+    "durationDays": 3650,
+    "isRedeemed": true,
+    "redeemedBy": "TG-1001",
+    "redeemedAt": 1789881849660
+  },
+  {
+    "key": "TG-VIP-PREMIUM320",
+    "plan": "monthly",
+    "durationDays": 30,
+    "isRedeemed": false,
+    "redeemedBy": null
+  },
+  {
+    "key": "TG-VIP-AMARMAX",
+    "plan": "lifetime",
+    "durationDays": 3650,
+    "isRedeemed": false,
+    "redeemedBy": null
+  }
+]

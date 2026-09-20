@@ -10,14 +10,12 @@ import {
   CheckCircle2, 
   Loader2, 
   ShieldCheck, 
-  Key, 
   ArrowRight,
   UserPlus,
   LogIn,
   Smartphone,
   RefreshCw,
-  AlertCircle,
-  HelpCircle
+  AlertCircle
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -27,11 +25,11 @@ export default function AuthModal() {
     closeAuthModal, 
     authMode, 
     login, 
-    register, 
+    requestRegister,
+    verifyRegisterOtp,
     sendOtp, 
     verifyOtp, 
-    resetPassword,
-    loginWithGoogle 
+    resetPassword
   } = useAuth();
   
   // Tabs: 'login' | 'register' | 'otp' | 'forgot'
@@ -42,8 +40,10 @@ export default function AuthModal() {
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regOtpSent, setRegOtpSent] = useState(false);
+  const [regOtpCode, setRegOtpCode] = useState('');
 
-  // OTP Flow
+  // OTP Login Flow
   const [emailForOtp, setEmailForOtp] = useState('');
   const [nameForOtp, setNameForOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -70,6 +70,8 @@ export default function AuthModal() {
       setTab(authMode === 'register' ? 'register' : 'login');
       setError('');
       setSuccessData(null);
+      setRegOtpSent(false);
+      setRegOtpCode('');
       setOtpSent(false);
       setOtpCode('');
       setForgotOtpSent(false);
@@ -92,7 +94,8 @@ export default function AuthModal() {
 
   // --- Handlers ---
 
-  const handleRegister = async (e) => {
+  // Register Step 1: Validate & Request Email Verification Code
+  const handleRegisterRequest = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -101,7 +104,8 @@ export default function AuthModal() {
       return;
     }
 
-    if (!regEmail || !regEmail.includes('@') || !regEmail.includes('.')) {
+    const cleanEmail = regEmail.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
       setError('Please enter a valid email address.');
       return;
     }
@@ -119,17 +123,43 @@ export default function AuthModal() {
     setLoading(true);
 
     try {
-      const user = await register({
+      await requestRegister({
         name: regName.trim(),
-        email: regEmail.trim(),
+        email: cleanEmail,
         password: regPassword,
+      });
+      setRegOtpSent(true);
+      setResendTimer(60);
+    } catch (err) {
+      setError(err.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Register Step 2: Verify 6-digit OTP and complete account creation
+  const handleRegisterVerify = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!regOtpCode || regOtpCode.trim().length !== 6) {
+      setError('Please enter the complete 6-digit verification code.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const user = await verifyRegisterOtp({
+        email: regEmail.trim().toLowerCase(),
+        code: regOtpCode.trim(),
       });
       setSuccessData(user);
       setTimeout(() => {
         closeAuthModal();
       }, 2000);
     } catch (err) {
-      setError(err.message || 'Registration failed.');
+      setError(err.message || 'Incorrect verification code. Please check your email.');
     } finally {
       setLoading(false);
     }
@@ -292,21 +322,21 @@ export default function AuthModal() {
               <span>TuneGrab Cloud Studio</span>
             </div>
             <h3 className="text-xl md:text-2xl font-black text-white tracking-tight">
-              {tab === 'login' && 'Welcome Back'}
-              {tab === 'register' && 'Create Your Account'}
-              {tab === 'otp' && 'Email Verification'}
+              {tab === 'login' && 'Sign In to Studio'}
+              {tab === 'register' && (regOtpSent ? 'Verify Email Address' : 'Create Verified Account')}
+              {tab === 'otp' && 'Email Verification Code'}
               {tab === 'forgot' && 'Reset Password'}
             </h3>
             <p className="text-xs text-zinc-400">
-              {tab === 'login' && 'Sign in to access your saved downloads and VIP license'}
-              {tab === 'register' && 'Join TuneGrab for high-speed 320kbps music conversion'}
-              {tab === 'otp' && 'Instant sign in with a 6-digit security code'}
+              {tab === 'login' && 'Enter your User ID or Email and password to continue'}
+              {tab === 'register' && (regOtpSent ? `We sent a 6-digit security code to ${regEmail}` : 'Register with email verification for 320kbps music downloads')}
+              {tab === 'otp' && 'Instant sign in with a 6-digit email security code'}
               {tab === 'forgot' && 'Enter your registered email to set a new password'}
             </p>
           </div>
 
           {/* Tab Navigation */}
-          {tab !== 'forgot' && !successData && (
+          {tab !== 'forgot' && !successData && !regOtpSent && (
             <div className="grid grid-cols-3 gap-1 p-1 bg-[#24252f] rounded-2xl border border-white/5">
               <button
                 type="button"
@@ -383,7 +413,7 @@ export default function AuthModal() {
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-zinc-300">
-                  User ID (e.g. TG-8924) or Registered Email
+                  User ID (e.g. TG-6423) or Registered Email
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -392,7 +422,7 @@ export default function AuthModal() {
                     required
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
-                    placeholder="TG-8924 or your@email.com"
+                    placeholder="TG-6423 or your@email.com"
                     className="w-full bg-[#24252f] text-white text-xs pl-10 pr-4 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
                   />
                 </div>
@@ -454,111 +484,175 @@ export default function AuthModal() {
             </form>
           )}
 
-          {/* TAB 2: SIGN UP (CREATE ACCOUNT) */}
+          {/* TAB 2: SIGN UP (2-STEP EMAIL VERIFIED REGISTRATION) */}
           {tab === 'register' && !successData && (
-            <form onSubmit={handleRegister} className="space-y-3.5">
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-zinc-300">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    required
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                    placeholder="e.g. Amar Max"
-                    className="w-full bg-[#24252f] text-white text-xs pl-10 pr-4 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-zinc-300">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    required
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="yourname@gmail.com"
-                    className="w-full bg-[#24252f] text-white text-xs pl-10 pr-4 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-zinc-300">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="password"
-                      required
-                      value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Min 6 chars"
-                      className="w-full bg-[#24252f] text-white text-xs pl-8 pr-3 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
-                    />
+            <div>
+              {!regOtpSent ? (
+                /* Step 1: Fill Name, Real Email & Password */
+                <form onSubmit={handleRegisterRequest} className="space-y-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-zinc-300">
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        value={regName}
+                        onChange={(e) => setRegName(e.target.value)}
+                        placeholder="e.g. Amar Max"
+                        className="w-full bg-[#24252f] text-white text-xs pl-10 pr-4 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-1">
-                  <label className="block text-xs font-semibold text-zinc-300">
-                    Confirm Pass
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="password"
-                      required
-                      value={regConfirmPassword}
-                      onChange={(e) => setRegConfirmPassword(e.target.value)}
-                      placeholder="Repeat pass"
-                      className="w-full bg-[#24252f] text-white text-xs pl-8 pr-3 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
-                    />
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-zinc-300">
+                      Real Email Address (Verification Code will be sent)
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="email"
+                        required
+                        value={regEmail}
+                        onChange={(e) => setRegEmail(e.target.value)}
+                        placeholder="yourname@gmail.com"
+                        className="w-full bg-[#24252f] text-white text-xs pl-10 pr-4 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                <span>Create Free Studio Account</span>
-              </button>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-semibold text-zinc-300">
+                        Password
+                      </label>
+                      <div className="relative">
+                        <Lock className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="password"
+                          required
+                          value={regPassword}
+                          onChange={(e) => setRegPassword(e.target.value)}
+                          placeholder="Min 6 chars"
+                          className="w-full bg-[#24252f] text-white text-xs pl-8 pr-3 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                        />
+                      </div>
+                    </div>
 
-              <div className="text-center pt-1">
-                <p className="text-[11px] text-zinc-400">
-                  Already have an account?{' '}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-semibold text-zinc-300">
+                        Confirm Pass
+                      </label>
+                      <div className="relative">
+                        <Lock className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="password"
+                          required
+                          value={regConfirmPassword}
+                          onChange={(e) => setRegConfirmPassword(e.target.value)}
+                          placeholder="Repeat pass"
+                          className="w-full bg-[#24252f] text-white text-xs pl-8 pr-3 py-3 rounded-2xl border border-white/5 focus:border-[#f0fc54] outline-none transition font-medium"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <button
-                    type="button"
-                    onClick={() => {
-                      setTab('login');
-                      setError('');
-                    }}
-                    className="text-[#f0fc54] hover:underline font-bold cursor-pointer"
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    Sign In here
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                    <span>Continue & Send Email Verification Code</span>
                   </button>
-                </p>
-              </div>
-            </form>
+
+                  <div className="text-center pt-1">
+                    <p className="text-[11px] text-zinc-400">
+                      Already have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTab('login');
+                          setError('');
+                        }}
+                        className="text-[#f0fc54] hover:underline font-bold cursor-pointer"
+                      >
+                        Sign In here
+                      </button>
+                    </p>
+                  </div>
+                </form>
+              ) : (
+                /* Step 2: Enter 6-Digit Email Verification Code */
+                <form onSubmit={handleRegisterVerify} className="space-y-4">
+                  <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+                    <span>📩 Enter the 6-digit verification code sent to <strong>{regEmail}</strong> to activate your account.</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-zinc-300">
+                        6-Digit Email Verification Code
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRegOtpSent(false);
+                          setRegOtpCode('');
+                          setError('');
+                        }}
+                        className="text-[10px] text-zinc-400 hover:text-white underline cursor-pointer"
+                      >
+                        Change Email / Details
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      maxLength={6}
+                      required
+                      autoFocus
+                      value={regOtpCode}
+                      onChange={(e) => setRegOtpCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="• • • • • •"
+                      className="w-full bg-[#24252f] text-center text-xl font-mono tracking-widest text-[#f0fc54] py-3.5 rounded-2xl border-2 border-white/10 focus:border-[#f0fc54] outline-none transition"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading || regOtpCode.length !== 6}
+                    className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    <span>Verify Code & Create Verified Account</span>
+                  </button>
+
+                  <div className="text-center pt-1">
+                    {resendTimer > 0 ? (
+                      <span className="text-[11px] text-zinc-500">Resend code in {resendTimer}s</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleRegisterRequest}
+                        className="text-[11px] text-[#f0fc54] hover:underline font-bold inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Resend Code
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+            </div>
           )}
 
-          {/* TAB 3: 6-DIGIT EMAIL OTP VERIFICATION */}
+          {/* TAB 3: 6-DIGIT EMAIL OTP LOGIN */}
           {tab === 'otp' && !successData && (
             <div className="space-y-4">
               {!otpSent ? (
-                /* Step 1: Request OTP */
                 <form onSubmit={handleSendOtp} className="space-y-3.5">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-semibold text-zinc-300">
@@ -603,7 +697,6 @@ export default function AuthModal() {
                   </button>
                 </form>
               ) : (
-                /* Step 2: Enter 6-Digit OTP */
                 <form onSubmit={handleVerifyOtp} className="space-y-3.5">
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -637,7 +730,7 @@ export default function AuthModal() {
 
                   <button
                     type="submit"
-                    disabled={loading || otpCode.length < 6}
+                    disabled={loading || otpCode.length !== 6}
                     className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
@@ -740,7 +833,7 @@ export default function AuthModal() {
 
                   <button
                     type="submit"
-                    disabled={loading || forgotCode.length < 6}
+                    disabled={loading || forgotCode.length !== 6}
                     className="w-full py-3.5 rounded-2xl bg-[#f0fc54] hover:bg-[#e4ef4a] text-black font-extrabold text-xs shadow-lg transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}

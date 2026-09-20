@@ -91,5 +91,18 @@
     "downloads": [],
     "favorites": [],
     "authProvider": "email_otp"
+  },
+  {
+    "userId": "TG-6217",
+    "name": "Amar Max",
+    "email": "amar@example.com",
+    "passwordHash": "44006a39b0729703e26f18da41cd526844d9cdad4267dc4fa7ce31c82d6f1744",
+    "createdAt": 1789881849656,
+    "isVip": false,
+    "vipKey": null,
+    "vipExpiry": null,
+    "downloads": [],
+    "favorites": [],
+    "authProvider": "password"
   }
 ]
