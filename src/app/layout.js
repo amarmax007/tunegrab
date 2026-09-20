@@ -104,6 +104,13 @@ export default function RootLayout({ children }) {
         />
         {/* Monetag Official Verification Meta Tag */}
         <meta name="monetag" content="0da3e3fe1271693335fba5ed48681abd" />
+        {/* Monetag MultiTag Official High-CPM Ad Network Script */}
+        <script
+          src="https://quge5.com/88/tag.min.js"
+          data-zone="283418"
+          async
+          data-cfasync="false"
+        />
         {/* Google AdSense Official Script Integration */}
         <script
           async
