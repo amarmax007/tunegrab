@@ -1,5 +1,5 @@
 export default function sitemap() {
-  const baseUrl = 'https://tunegrab.app';
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tunegrab-nine.vercel.app';
 
   const routes = [
     '',

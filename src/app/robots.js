@@ -1,10 +1,12 @@
 export default function robots() {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://tunegrab-nine.vercel.app';
+
   return {
     rules: {
       userAgent: '*',
       allow: '/',
       disallow: ['/api/'],
     },
-    sitemap: 'https://tunegrab.app/sitemap.xml',
+    sitemap: `${baseUrl}/sitemap.xml`,
   };
 }
