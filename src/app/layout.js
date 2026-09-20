@@ -108,6 +108,18 @@ export default function RootLayout({ children }) {
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6966661599294786"
           crossOrigin="anonymous"
         />
+        {/* Monetag Push & Ad Service Worker Registration */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function(err) {});
+                });
+              }
+            `,
+          }}
+        />
       </head>
       <body suppressHydrationWarning className="min-h-screen bg-[#141416] text-white font-sans antialiased selection:bg-[#f0fc54] selection:text-black">
         <ThemeProvider>
