@@ -146,6 +146,67 @@ function generateUserId() {
   return `TG-${num}`;
 }
 
+import dns from 'dns';
+
+// Popular verified email domains that have guaranteed MX servers
+const TRUSTED_EMAIL_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'yahoo.com',
+  'yahoo.co.in',
+  'yahoo.co.uk',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'msn.com',
+  'icloud.com',
+  'me.com',
+  'proton.me',
+  'protonmail.com',
+  'zoho.com',
+  'aol.com',
+  'rediffmail.com',
+  'gmx.com',
+  'mail.com',
+]);
+
+export async function validateEmailWithMx(email) {
+  if (!email || typeof email !== 'string') return { valid: false, error: 'Email address is required.' };
+  const clean = email.trim().toLowerCase();
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(clean)) return { valid: false, error: 'Invalid email address format (e.g. name@gmail.com).' };
+  
+  const parts = clean.split('@');
+  if (parts.length !== 2) return { valid: false, error: 'Invalid email format.' };
+  const domain = parts[1];
+
+  if (!domain || !domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) {
+    return { valid: false, error: 'Invalid domain format.' };
+  }
+
+  // Reject known dummy/disposable temporary email domains
+  if (DISALLOWED_DOMAINS.has(domain)) {
+    return { valid: false, error: `The domain "@${domain}" is a temporary/disposable domain and is blocked.` };
+  }
+
+  // If in trusted list, fast pass
+  if (TRUSTED_EMAIL_DOMAINS.has(domain)) {
+    return { valid: true, cleanEmail: clean };
+  }
+
+  // For other domains (e.g. oooooo.com, custom domains), verify real DNS MX records
+  try {
+    const mxRecords = await dns.promises.resolveMx(domain);
+    if (!mxRecords || mxRecords.length === 0) {
+      return { valid: false, error: `The domain "@${domain}" does not have active MX mail servers to receive emails.` };
+    }
+  } catch (err) {
+    return { valid: false, error: `Invalid email domain "@${domain}". No active mail server (MX) found for this domain.` };
+  }
+
+  return { valid: true, cleanEmail: clean };
+}
+
 export function validateEmail(email) {
   if (!email || typeof email !== 'string') return false;
   const clean = email.trim().toLowerCase();
@@ -160,7 +221,6 @@ export function validateEmail(email) {
     return false;
   }
 
-  // Reject dummy/disposable temporary email domains
   if (DISALLOWED_DOMAINS.has(domain)) {
     return false;
   }
@@ -172,10 +232,11 @@ export function validateEmail(email) {
  * Step 1 of Strict Registration: Validates data, reserves credentials, and sends real 6-digit OTP
  */
 export async function requestRegistrationOtp({ name, email, password }) {
-  const cleanEmail = String(email).trim().toLowerCase();
-  if (!validateEmail(cleanEmail)) {
-    throw new Error('Please enter a genuine, valid email address (e.g. yourname@gmail.com). Disposable/fake domains are not allowed.');
+  const mxCheck = await validateEmailWithMx(email);
+  if (!mxCheck.valid) {
+    throw new Error(mxCheck.error || 'Please enter a genuine, active email address.');
   }
+  const cleanEmail = mxCheck.cleanEmail;
 
   if (!name || String(name).trim().length < 2) {
     throw new Error('Please enter your full name (minimum 2 characters).');
@@ -277,10 +338,11 @@ export function completeRegistrationWithOtp({ email, code }) {
  * Standalone OTP Request for Passwordless Login
  */
 export async function generateEmailOtp(email) {
-  const cleanEmail = String(email).trim().toLowerCase();
-  if (!validateEmail(cleanEmail)) {
-    throw new Error('Please enter a valid, real email address (e.g. name@gmail.com).');
+  const mxCheck = await validateEmailWithMx(email);
+  if (!mxCheck.valid) {
+    throw new Error(mxCheck.error || 'Please enter a genuine, active email address.');
   }
+  const cleanEmail = mxCheck.cleanEmail;
 
   const code = Math.floor(100000 + Math.random() * 900000).toString();
   const expiresAt = Date.now() + 10 * 60 * 1000;
